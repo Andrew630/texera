@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from typing import Dict, List
 
 import betterproto
-from betterproto.grpc.grpclib_server import ServiceBase
 
 
 class WorkerState(betterproto.Enum):
@@ -99,6 +98,11 @@ class EvaluateExpressionV2(betterproto.Message):
 
 
 @dataclass(eq=False, repr=False)
+class EchoV2(betterproto.Message):
+    msg: str = betterproto.string_field(1)
+
+
+@dataclass(eq=False, repr=False)
 class ControlCommandV2(betterproto.Message):
     start_worker: "StartWorkerV2" = betterproto.message_field(1, group="sealed_value")
     pause_worker: "PauseWorkerV2" = betterproto.message_field(2, group="sealed_value")
@@ -135,6 +139,7 @@ class ControlCommandV2(betterproto.Message):
     worker_execution_completed: "WorkerExecutionCompletedV2" = (
         betterproto.message_field(101, group="sealed_value")
     )
+    echo: "EchoV2" = betterproto.message_field(901, group="sealed_value")
 
 
 @dataclass(eq=False, repr=False)
@@ -170,6 +175,11 @@ class EvaluatedValue(betterproto.Message):
 
 
 @dataclass(eq=False, repr=False)
+class EchoResponse(betterproto.Message):
+    msg: str = betterproto.string_field(1)
+
+
+@dataclass(eq=False, repr=False)
 class ControlReturnV2(betterproto.Message):
     control_exception: "ControlException" = betterproto.message_field(1, group="value")
     worker_statistics: "WorkerStatistics" = betterproto.message_field(2, group="value")
@@ -178,6 +188,7 @@ class ControlReturnV2(betterproto.Message):
         4, group="value"
     )
     evaluated_value: "EvaluatedValue" = betterproto.message_field(5, group="value")
+    echo_response: "EchoResponse" = betterproto.message_field(901, group="value")
 
 
 from .. import sendsemantics as _sendsemantics__

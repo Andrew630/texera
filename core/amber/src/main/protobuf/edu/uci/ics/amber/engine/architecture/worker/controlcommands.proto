@@ -65,6 +65,10 @@ message EvaluateExpressionV2 {
     string expression = 1;
 }
 
+message EchoV2 {
+    string msg = 1;
+}
+
 message ControlCommandV2 {
     oneof sealed_value {
         StartWorkerV2 start_worker = 1;
@@ -79,7 +83,7 @@ message ControlCommandV2 {
 
         LocalOperatorExceptionV2 local_operator_exception = 8;
 
-        OpenOperatorV2 open_operator= 9;
+        OpenOperatorV2 open_operator = 9;
 
         InitializeOperatorLogicV2 initialize_operator_logic = 21;
         ModifyOperatorLogicV2 modify_operator_logic = 22;
@@ -88,6 +92,8 @@ message ControlCommandV2 {
         EvaluateExpressionV2 evaluate_expression = 25;
 
         WorkerExecutionCompletedV2 worker_execution_completed = 101;
+
+        EchoV2 echo = 901;
     }
 
 }

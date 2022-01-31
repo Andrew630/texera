@@ -31,6 +31,10 @@ message EvaluatedValue {
     repeated TypedValue attributes = 2;
 }
 
+message EchoResponse {
+    string msg = 1;
+}
+
 message ControlReturnV2 {
     oneof value {
         ControlException control_exception = 1;
@@ -39,6 +43,8 @@ message ControlReturnV2 {
         WorkerState worker_state = 3;
         CurrentInputTupleInfo current_input_tuple_info = 4;
         EvaluatedValue evaluated_value = 5;
+
+        EchoResponse echo_response = 901;
     }
 }
 
