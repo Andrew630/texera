@@ -5,11 +5,14 @@ import time
 import uuid
 from contextlib import closing
 
-from core.models import InternalQueue, ControlElement
+from core.models import InternalQueue, ControlElement, DataElement
 from core.runnables import NetworkReceiver, NetworkSender
 from core.util import set_one_of
-from proto.edu.uci.ics.amber.engine.architecture.worker import EchoV2
-from proto.edu.uci.ics.amber.engine.common import ControlPayloadV2, ControlInvocationV2
+from proto.edu.uci.ics.amber.engine.architecture.sendsemantics import Partitioning, OneToOnePartitioning
+from proto.edu.uci.ics.amber.engine.architecture.worker import ControlCommandV2, InitializeOperatorLogicV2, \
+    AddPartitioningV2, OpenOperatorV2, StartWorkerV2
+from proto.edu.uci.ics.amber.engine.common import ControlPayloadV2, ControlInvocationV2, ActorVirtualIdentity, \
+    LinkIdentity, LayerIdentity
 
 
 def find_free_port():
@@ -23,8 +26,9 @@ def gen_uuid(prefix=""):
     return prefix + str(uuid.uuid1())
 
 
-class ExecutionManager:
+class WorkerProxy:
     def __init__(self):
+        self.id = gen_uuid("Worker")
         self.input_port = find_free_port()
         self.output_port = find_free_port()
         self._input_queue = InternalQueue()
@@ -36,16 +40,22 @@ class ExecutionManager:
             try:
                 time.sleep(1)
                 print(f"trying to connect input_port={self.input_port}, output_port={self.output_port}")
-                self.network_receiver = NetworkReceiver(self._output_queue, host="0.0.0.0", port=self.output_port,
-                                                        schema_map={})
-                self.network_sender = NetworkSender(self._input_queue, host="0.0.0.0", port=self.input_port,
-                                                    schema_map={})
+                self.network_receiver = NetworkReceiver(self._output_queue, host="0.0.0.0", port=self.output_port)
+                threading.Thread(target=self.network_receiver.run).start()
+                self.network_sender = NetworkSender(self._input_queue, host="0.0.0.0", port=self.input_port)
+                threading.Thread(target=self.network_sender.run).start()
                 connected = True
-            except:
-                pass
+            except Exception as err:
+                print(err)
 
     def send_cmd(self, cmd):
-        self._input_queue.put(cmd)
+        control_payload = set_one_of(ControlPayloadV2, ControlInvocationV2(1, set_one_of(ControlCommandV2, cmd)))
+        self._input_queue.put(ControlElement(tag=ActorVirtualIdentity("CONTROLLER"), payload=control_payload))
+
+    def send_data(self, data, schema):
+        batch = data
+        batch.schema = schema
+        self._output_queue.put(DataElement(tag=ActorVirtualIdentity(self.id), payload=batch))
 
 
 class Workflow:
@@ -60,23 +70,52 @@ class Workflow:
         self.links[gen_uuid("link")] = link
 
     def exec(self):
-        self.execution_managers = []
+        self.worker_proxies = []
         for oid, operator in self.operators.items():
-            self.execution_managers.append(ExecutionManager())
-        for execution_manager in self.execution_managers:
-            execution_manager.process.wait()
+            self.worker_proxies.append(WorkerProxy())
+        for worker_proxy in self.worker_proxies:
+            worker_proxy.process.wait()
 
 
 if __name__ == '__main__':
     workflow = Workflow()
     workflow.add_operator("op1")
-    th = threading.Thread(target=workflow.exec)
-    th.start()
-
+    controller_thread = threading.Thread(target=workflow.exec)
+    controller_thread.start()
     time.sleep(2)
-    control_payload = set_one_of(ControlPayloadV2, ControlInvocationV2(1, EchoV2("hello")))
 
-    workflow.execution_managers[0].send_cmd(ControlElement(tag="1", payload=control_payload))
-    time.sleep(2)
-    print(workflow.execution_managers[0]._output_queue.get())
-    th.join()
+    # should have started worker
+    target_worker_proxy = workflow.worker_proxies[0]
+
+
+    def f():
+        while True:
+            print(target_worker_proxy._output_queue.get())
+
+
+    threading.Thread(target=f).start()
+
+    workflow.worker_proxies[0].send_cmd(InitializeOperatorLogicV2(code="""
+from typing import Iterator, Optional, Union
+from pytexera import *
+
+class ProcessTupleOperator(UDFOperator):
+    
+    def open(self):
+        import time
+        time.sleep(2)
+        
+    @overrides
+    def process_tuple(self, tuple_: Union[Tuple, InputExhausted], input_: int) -> Iterator[Optional[TupleLike]]:
+        # if isinstance(tuple_, Tuple):
+        yield {"a":"this"}
+        yield {"a":"this"}
+        yield {"a":"this"}
+    """, is_source=True, output_schema={"a": "string"}))
+    partitioning = set_one_of(Partitioning, OneToOnePartitioning(1, [ActorVirtualIdentity("op2")]))
+    target_worker_proxy.send_cmd(
+        AddPartitioningV2(LinkIdentity(from_=LayerIdentity(), to=LayerIdentity()), partitioning))
+    target_worker_proxy.send_cmd(OpenOperatorV2())
+    target_worker_proxy.send_cmd(StartWorkerV2())
+
+    controller_thread.join()

@@ -36,6 +36,7 @@ class NetworkSender(StoppableQueueBlockingRunnable):
         :param to: The target actor's ActorVirtualIdentity
         :param data_payload: The data payload to be sent, can be either DataFrame or EndOfUpstream
         """
+        logger.debug(f"sending data {data_payload}")
         if isinstance(data_payload, OutputDataFrame):
             # TODO: change to iter of pa.RecordBatch
             field_names = data_payload.schema.names
@@ -62,5 +63,6 @@ class NetworkSender(StoppableQueueBlockingRunnable):
         :param control_payload: The control payload to be sent, can be either ControlInvocation or
             ReturnInvocation.
         """
+        logger.debug(f"sending control {control_payload}")
         python_control_message = PythonControlMessage(tag=to, payload=control_payload)
         self._proxy_client.call_action("control", bytes(python_control_message))
