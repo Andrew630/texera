@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from collections import defaultdict
+from copy import deepcopy
 from typing import Iterator, List, Mapping, Optional, Union
 
 import overrides
@@ -58,6 +59,15 @@ class Operator(ABC):
         Close the context of the operator.
         """
         pass
+
+    def init_output_schema(self):
+        backup = deepcopy(self.__dict__)
+        try:
+            self.process_tuple(None, None)
+        except:
+            pass
+        backup.update({"_Operator__internal_output_schema": self.__dict__["_Operator__internal_output_schema"]})
+        self.__dict__ = backup
 
 
 class TupleOperator(Operator):

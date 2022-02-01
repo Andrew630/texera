@@ -1,9 +1,12 @@
+import inspect
 import socket
 import subprocess
 import threading
 import time
 import uuid
 from contextlib import closing
+
+from loguru import logger
 
 from core.models import InternalQueue, ControlElement, DataElement
 from core.runnables import NetworkReceiver, NetworkSender
@@ -22,8 +25,8 @@ def find_free_port():
         return s.getsockname()[1]
 
 
-def gen_uuid(prefix=""):
-    return prefix + str(uuid.uuid1())
+def gen_uuid(prefix="", name=""):
+    return f"{prefix}{'-' if prefix else ''}{uuid.uuid1()}"
 
 
 class WorkerProxy:
@@ -69,10 +72,20 @@ class Workflow:
     def add_link(self, link):
         self.links[gen_uuid("link")] = link
 
-    def exec(self):
-        self.worker_proxies = []
+    def start(self):
+        self.worker_proxies = {}
         for oid, operator in self.operators.items():
-            self.worker_proxies.append(WorkerProxy())
+            worker_proxy = WorkerProxy()
+            self.worker_proxies[oid] = worker_proxy
+            is_source = operator.is_source
+            code = inspect.getsource(operator.__class__)
+            operator.init_output_schema()
+            worker_proxy.send_cmd(
+                InitializeOperatorLogicV2(code=code, is_source=is_source, output_schema=output_schema))
+
+            output_schema = operator.output_schema
+
+    def wait(self):
         for worker_proxy in self.worker_proxies:
             worker_proxy.process.wait()
 
@@ -90,7 +103,7 @@ if __name__ == '__main__':
 
     def f():
         while True:
-            print(target_worker_proxy._output_queue.get())
+            logger.debug(target_worker_proxy._output_queue.get())
 
 
     threading.Thread(target=f).start()
