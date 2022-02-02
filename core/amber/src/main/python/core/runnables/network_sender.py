@@ -3,7 +3,7 @@ from overrides import overrides
 from pyarrow import Table
 
 from core.models import ControlElement, DataElement, OutputDataFrame, DataPayload, EndOfUpstream, InternalQueue, \
-    InternalQueueElement
+    InternalQueueElement, InputDataFrame
 from core.proxy import ProxyClient
 from core.util import StoppableQueueBlockingRunnable
 from proto.edu.uci.ics.amber.engine.common import ActorVirtualIdentity, ControlPayloadV2, PythonControlMessage, \
@@ -47,7 +47,9 @@ class NetworkSender(StoppableQueueBlockingRunnable):
             )
             data_header = PythonDataHeader(tag=to, is_end=False)
             self._proxy_client.send_data(bytes(data_header), table)
-
+        elif isinstance(data_payload, InputDataFrame):
+            data_header = PythonDataHeader(tag=to, is_end=False)
+            self._proxy_client.send_data(bytes(data_header), data_payload.frame)
         elif isinstance(data_payload, EndOfUpstream):
             data_header = PythonDataHeader(tag=to, is_end=True)
             self._proxy_client.send_data(bytes(data_header), None)

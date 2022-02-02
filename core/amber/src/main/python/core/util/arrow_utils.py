@@ -13,10 +13,14 @@ ARROW_TYPE_MAPPING = {
     'double': pa.float64(),
     'boolean': pa.bool_(),
     'timestamp': pa.timestamp('ms', tz="UTC"),
-    'ANY': pa.string()
+    # 'ANY': pa.string()
 }
 
 
 def to_arrow_schema(raw_schema: Mapping[str, str]) -> pa.Schema:
     return pa.schema(
         [pa.field(name, ARROW_TYPE_MAPPING[attribute_type]) for name, attribute_type in raw_schema.items()])
+
+def from_arrow_schema(schema: pa.Schema) -> Mapping[str, str]:
+    rev = {v:k for k,v in ARROW_TYPE_MAPPING.items()}
+    return {name: rev[schema.field(name).type] for name in schema.names}
