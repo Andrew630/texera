@@ -57,7 +57,7 @@ class WorkerProxy:
                 threading.Thread(target=self.network_sender.run).start()
                 connected = True
             except Exception as err:
-                print(err)
+                logger.error(err)
 
     def send_cmd(self, cmd):
         control_payload = set_one_of(ControlPayloadV2, ControlInvocationV2(1, set_one_of(ControlCommandV2, cmd)))

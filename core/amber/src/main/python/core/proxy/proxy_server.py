@@ -147,7 +147,6 @@ class ProxyServer(FlightServerBase):
         """
 
         action_name = action.type
-        logger.debug(f"python getting a call on {action_name}")
         # get action by name
         if action_name in self._procedures:
             procedure, _ = self._procedures.get(action_name)
