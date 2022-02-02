@@ -86,59 +86,57 @@ class Controller(
   // bring all workers into a ready state
   prepareWorkers()
 
-  def prepareWorkers(): Future[Seq[Unit]] = {
-
-    // initialize python operator code
-    val initializeOperatorLogicRequests: Seq[Future[Unit]] =
-      workflow.getPythonWorkerToOperatorExec.map {
-        case (workerID: ActorVirtualIdentity, pythonOperatorExec: PythonUDFOpExecV2) =>
-          asyncRPCClient.send(
-            InitializeOperatorLogic(
-              pythonOperatorExec.getCode,
-              pythonOperatorExec.isInstanceOf[ISourceOperatorExecutor],
-              pythonOperatorExec.getOutputSchema
-            ),
-            workerID
+  def prepareWorkers(): Future[Unit] = {
+    Future(asyncRPCClient.sendToClient(WorkflowStatusUpdate(workflow.getWorkflowStatus)))
+      .flatMap(_ =>
+        Future
+          .collect(
+            // initialize python operator code
+            workflow.getPythonWorkerToOperatorExec.map {
+              case (workerID: ActorVirtualIdentity, pythonOperatorExec: PythonUDFOpExecV2) =>
+                asyncRPCClient.send(
+                  InitializeOperatorLogic(
+                    pythonOperatorExec.getCode,
+                    pythonOperatorExec.isInstanceOf[ISourceOperatorExecutor],
+                    pythonOperatorExec.getOutputSchema
+                  ),
+                  workerID
+                )
+            }.toSeq
           )
-      }.toSeq
-
-    // activate all links
-    val activateLinkRequests: Seq[Future[Unit]] =
-      workflow.getAllLinks.map { link: LinkStrategy =>
-        asyncRPCClient.send(
-          LinkWorkers(link),
-          CONTROLLER
-        )
-      }.toSeq
-
-    // open all operators
-    val openOperatorRequests: Seq[Future[Unit]] =
-      workflow.getAllWorkers.map { workerID: ActorVirtualIdentity =>
-        asyncRPCClient.send(
-          OpenOperator(),
-          workerID
-        )
-      }.toSeq
-
-    Future
-      .collect(
-        initializeOperatorLogicRequests
+          .onFailure((err: Throwable) => {
+            logger.error("Failure when sending Python UDF code", err)
+            // report error to frontend
+            asyncRPCClient.sendToClient(FatalError(err))
+          })
       )
-      .onFailure((err: Throwable) => {
-        logger.error("Failure when sending Python UDF code", err)
-        // report error to frontend
-        asyncRPCClient.sendToClient(FatalError(err))
-      })
-      .flatMap(_ => Future.collect(activateLinkRequests))
-      .flatMap({ _ =>
+      .flatMap(_ =>
+        Future.collect(
+          // activate all links
+          workflow.getAllLinks.map { link: LinkStrategy =>
+            asyncRPCClient.send(LinkWorkers(link), CONTROLLER)
+          }.toSeq
+        )
+      )
+      .flatMap(_ =>
         Future {
-          workflow.getAllOperators.foreach(_.setAllWorkerState(READY))
-          asyncRPCClient.sendToClient(WorkflowStatusUpdate(workflow.getWorkflowStatus))
           context.become(running)
           unstashAll()
         }
-      })
-      .flatMap(_ => Future.collect(openOperatorRequests))
+      )
+      .flatMap(
+        // open all operators
+        _ =>
+          Future.collect(workflow.getAllWorkers.map { workerID =>
+            asyncRPCClient.send(OpenOperator(), workerID)
+          }.toSeq)
+      )
+      .flatMap(_ =>
+        Future {
+          workflow.getAllOperators.foreach(_.setAllWorkerState(READY))
+          asyncRPCClient.sendToClient(WorkflowStatusUpdate(workflow.getWorkflowStatus))
+        }
+      )
   }
 
   def running: Receive = {
