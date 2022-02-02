@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from copy import deepcopy
-from typing import Iterator, List, Mapping, Optional, Union
+from typing import Iterator, List, Mapping, Optional, Union, Dict
 
 import overrides
 import pandas
@@ -9,6 +9,15 @@ from pyarrow.lib import Schema
 
 from . import InputExhausted, Table, TableLike, Tuple, TupleLike
 from ..util.arrow_utils import to_arrow_schema
+
+
+def metadata(output_schema: Dict[str, str] = {}, is_source=False):
+    def metadata_decorator(cls):
+        cls.output_schema = to_arrow_schema(output_schema)
+        cls.is_source = is_source
+        return cls
+
+    return metadata_decorator
 
 
 class Operator(ABC):
@@ -39,6 +48,7 @@ class Operator(ABC):
     @overrides.final
     def output_schema(self) -> Schema:
         assert self.__internal_output_schema is not None
+        assert isinstance(self.__internal_output_schema, Schema)
         return self.__internal_output_schema
 
     @output_schema.setter

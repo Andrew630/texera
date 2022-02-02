@@ -1,6 +1,5 @@
 from abc import abstractmethod
-from functools import wraps
-from typing import Iterator, Optional, Union, Callable, Dict
+from typing import Iterator, Optional, Union
 
 from pyamber import *
 
@@ -10,19 +9,6 @@ class UDFOperator(TupleOperator):
     Base class for tuple-oriented user-defined operators. A concrete implementation must
     be provided upon using.
     """
-
-    def output(original_func: Optional[Callable] = None, schema: Dict[str, str] = {}):
-        def output_schema_decorator(func: Callable):
-            @wraps(func)
-            def wrapper(self, *args, **kwargs):
-                self.output_schema = schema
-                return func(self, *args, **kwargs)
-
-            return wrapper
-
-        if original_func:
-            return output_schema_decorator(original_func)
-        return output_schema_decorator
 
     def open(self) -> None:
         """

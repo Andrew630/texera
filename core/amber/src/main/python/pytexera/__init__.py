@@ -11,6 +11,7 @@ __all__ = [
     'UDFOperator',
     'Table',
     'TableLike',
+    'metadata',
     'UDFTableOperator',
     # export external tools to be used
     'overrides',
