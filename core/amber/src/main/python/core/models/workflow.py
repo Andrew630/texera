@@ -45,7 +45,7 @@ class WorkerProxy:
         self._input_queue = InternalQueue()
         self._output_queue = InternalQueue()
         self.process = subprocess.Popen(
-            ["python", "../../texera_run_python_worker.py", str(self.input_port), str(self.output_port), "INFO"])
+            ["python", "../../texera_run_python_worker.py", str(self.input_port), str(self.output_port), "ERROR"])
         connected = False
         while not connected:
             try:
@@ -84,21 +84,15 @@ class Workflow:
         return lid
 
     def start(self):
-
-        def message_forwarder():
+        def message_forwarder(worker_proxy):
             while True:
-                for oid, worker_proxy in dict(self.worker_proxies).items():
-                    msg = worker_proxy._output_queue.get()
-                    if isinstance(msg, DataElement):
-                        vid = msg.tag
-                        dst_id = vid.name
-                        if dst_id != "CONTROLLER":
-                            dst_worker_proxy = self.worker_proxies[dst_id]
-                            dst_worker_proxy.send_data(msg)
-                        if not isinstance(msg.payload, EndOfUpstream):
-                            print(msg.payload.frame.to_pydict())
-
-        threading.Thread(target=message_forwarder).start()
+                msg = worker_proxy._output_queue.get()
+                if isinstance(msg, DataElement):
+                    vid = msg.tag
+                    dst_id = vid.name
+                    if dst_id != "CONTROLLER":
+                        dst_worker_proxy = self.worker_proxies[dst_id]
+                        dst_worker_proxy.send_data(msg)
 
         for oid, operator in self.operators.items():
             worker_proxy = WorkerProxy()
@@ -119,6 +113,9 @@ from typing import Union, Optional, Iterator
                 InitializeOperatorLogicV2(code=code, is_source=is_source,
                                           output_schema=from_arrow_schema(output_schema)))
             worker_proxy.send_cmd(OpenOperatorV2())
+
+        for oid, worker_proxy in dict(self.worker_proxies).items():
+            threading.Thread(target=message_forwarder, args=(worker_proxy,)).start()
 
         for lid, link in self.links.items():
             src_op_proxy = self.worker_proxies[link.from_]

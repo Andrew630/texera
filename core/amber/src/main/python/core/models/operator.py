@@ -11,10 +11,11 @@ from . import InputExhausted, Table, TableLike, Tuple, TupleLike
 from ..util.arrow_utils import to_arrow_schema
 
 
-def metadata(output_schema: Dict[str, str] = {}, is_source=False):
+def metadata(output_schema: Dict[str, str] = {}, is_source=False, is_sink=False):
     def metadata_decorator(cls):
         cls.output_schema = to_arrow_schema(output_schema)
         cls.is_source = is_source
+        cls.is_sink = is_sink
         return cls
 
     return metadata_decorator
@@ -27,6 +28,7 @@ class Operator(ABC):
 
     def __init__(self):
         self.__internal_is_source: bool = False
+        self.__internal_is_sink: bool = False
         self.__internal_output_schema: Optional[Schema] = None
 
     @property
@@ -43,6 +45,21 @@ class Operator(ABC):
     @overrides.final
     def is_source(self, value: bool) -> None:
         self.__internal_is_source = value
+
+    @property
+    @overrides.final
+    def is_sink(self) -> bool:
+        """
+        Whether the operator is a source operator. Source operators generates output
+        Tuples without having input Tuples.
+        :return:
+        """
+        return self.__internal_is_sink
+
+    @is_sink.setter
+    @overrides.final
+    def is_sink(self, value: bool) -> None:
+        self.__internal_is_sink = value
 
     @property
     @overrides.final
