@@ -6,18 +6,20 @@ import com.fasterxml.jackson.databind.annotation.{JsonDeserialize, JsonSerialize
 import com.fasterxml.jackson.databind.deser.std.StdDeserializer
 import com.fasterxml.jackson.databind.ser.std.StdSerializer
 
+/**
+  * @param name state name
+  * @param code indicates the status of the execution in the DB it is 0 by default for any unused states. T
+  *             his code is stored in the DB and read in the frontend.
+  *             If these codes are changed, they also have to be changed in the frontend `ngbd-modal-workflow-executions.component.ts`
+  */
 @JsonSerialize(`using` = classOf[ExecutionStatusEnumJsonSerializer])
 @JsonDeserialize(`using` = classOf[ExecutionStatusEnumJsonDeserializer])
 sealed abstract class ExecutionStatusEnum(
     val name: String,
-    val code: Byte
-) // code indicates the status of the execution in the DB
-case object Uninitialized extends ExecutionStatusEnum("Uninitialized", 0)
-case object Initializing
-    extends ExecutionStatusEnum(
-      "Initializing",
-      0
-    )
+    val code: Byte = 0
+)
+case object Uninitialized extends ExecutionStatusEnum("Uninitialized")
+case object Initializing extends ExecutionStatusEnum("Initializing")
 case object Running extends ExecutionStatusEnum("Running", 1)
 case object Pausing extends ExecutionStatusEnum("Pausing", 1)
 case object Paused extends ExecutionStatusEnum("Paused", 2)
