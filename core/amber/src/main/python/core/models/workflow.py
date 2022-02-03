@@ -19,7 +19,7 @@ from core.util.arrow_utils import from_arrow_schema
 from proto.edu.uci.ics.amber.engine.architecture.sendsemantics import Partitioning, OneToOnePartitioning
 from proto.edu.uci.ics.amber.engine.architecture.worker import ControlCommandV2, InitializeOperatorLogicV2, \
     AddPartitioningV2, OpenOperatorV2, StartWorkerV2, UpdateInputLinkingV2, WorkerExecutionCompletedV2, \
-    QueryStatisticsV2
+    QueryStatisticsV2, PauseWorkerV2, ResumeWorkerV2
 from proto.edu.uci.ics.amber.engine.common import ControlPayloadV2, ControlInvocationV2, ActorVirtualIdentity, \
     LinkIdentity, LayerIdentity, ReturnInvocationV2
 
@@ -121,6 +121,9 @@ class Controller(threading.Thread):
                     proxy.process.kill()
                     logger.debug(f"killed {proxy.id}")
                 self._running = False
+        elif command in [PauseWorkerV2(), ResumeWorkerV2()]:
+            self.broadcast(command)
+
 
     def broadcast(self, cmd, target_proxies=None):
         if target_proxies is None:
@@ -163,7 +166,7 @@ from typing import Union, Optional, Iterator
             worker_proxy.send_cmd(OpenOperatorV2())
 
         for oid, worker_proxy in dict(self._workflow.worker_proxies).items():
-            threading.Thread(target=message_forwarder, args=(worker_proxy,),daemon=True).start()
+            threading.Thread(target=message_forwarder, args=(worker_proxy,), daemon=True).start()
 
         for lid, link in self._workflow.links.items():
             src_op_proxy = self._workflow.worker_proxies[link.from_]
@@ -196,11 +199,26 @@ class Workflow:
         return lid
 
     def start(self):
-        controller_queue = Queue()
-        controller = Controller(self, controller_queue)
-        controller.start()
-        print("here")
+        self.controller_queue = Queue()
+        self.controller = Controller(self, self.controller_queue)
+        self.controller.start()
 
     def wait(self):
         for worker_proxy in self.worker_proxies.values():
             worker_proxy.process.wait()
+
+    def interact(self):
+        def send_cmd(cmd):
+            control_payload = set_one_of(ControlPayloadV2,
+                                         ControlInvocationV2(1, set_one_of(ControlCommandV2, cmd)))
+            self.controller_queue.put(
+                ControlElement(tag=ActorVirtualIdentity("CONTROLLER"), payload=control_payload))
+
+        def send_data(self, data_element):
+            self.controller_queue.put(data_element)
+        while True:
+            cmd = input("command to wf:\n")
+            if cmd == "pause":
+                send_cmd(PauseWorkerV2())
+            elif cmd == "resume":
+                send_cmd(ResumeWorkerV2())
