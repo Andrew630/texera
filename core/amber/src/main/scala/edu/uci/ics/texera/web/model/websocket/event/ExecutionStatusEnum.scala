@@ -8,8 +8,8 @@ import com.fasterxml.jackson.databind.ser.std.StdSerializer
 
 /**
   * @param name state name
-  * @param code indicates the status of the execution in the DB it is 0 by default for any unused states. T
-  *             his code is stored in the DB and read in the frontend.
+  * @param code indicates the status of the execution in the DB it is 0 by default for any unused states.
+  *             This code is stored in the DB and read in the frontend.
   *             If these codes are changed, they also have to be changed in the frontend `ngbd-modal-workflow-executions.component.ts`
   */
 @JsonSerialize(`using` = classOf[ExecutionStatusEnumJsonSerializer])
