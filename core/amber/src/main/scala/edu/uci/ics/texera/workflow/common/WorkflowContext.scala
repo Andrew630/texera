@@ -8,4 +8,6 @@ class WorkflowContext {
   var userId: Option[UInteger] = None
 
   var wId: Int = _
+
+  var executionID: UInteger = _
 }

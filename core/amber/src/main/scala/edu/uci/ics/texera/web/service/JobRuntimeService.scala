@@ -2,10 +2,7 @@ package edu.uci.ics.texera.web.service
 
 import com.google.common.collect.EvictingQueue
 import com.typesafe.scalalogging.LazyLogging
-import edu.uci.ics.amber.engine.architecture.breakpoint.globalbreakpoint.{
-  ConditionalGlobalBreakpoint,
-  CountGlobalBreakpoint
-}
+import edu.uci.ics.amber.engine.architecture.breakpoint.globalbreakpoint.{ConditionalGlobalBreakpoint, CountGlobalBreakpoint}
 import edu.uci.ics.amber.engine.architecture.controller.ControllerEvent._
 import edu.uci.ics.amber.engine.architecture.controller.promisehandlers.AssignBreakpointHandler.AssignGlobalBreakpoint
 import edu.uci.ics.amber.engine.architecture.controller.promisehandlers.EvaluatePythonExpressionHandler.EvaluatePythonExpression
@@ -27,12 +24,7 @@ import edu.uci.ics.texera.web.model.websocket.request.{RemoveBreakpointRequest, 
 import edu.uci.ics.texera.workflow.common.WorkflowContext
 import edu.uci.ics.texera.workflow.common.operators.OperatorDescriptor
 import edu.uci.ics.texera.workflow.common.tuple.Tuple
-import edu.uci.ics.texera.workflow.common.workflow.{
-  Breakpoint,
-  BreakpointCondition,
-  ConditionBreakpoint,
-  CountBreakpoint
-}
+import edu.uci.ics.texera.workflow.common.workflow.{Breakpoint, BreakpointCondition, ConditionBreakpoint, CountBreakpoint}
 import org.jooq.types.UInteger
 import rx.lang.scala.subjects.BehaviorSubject
 import rx.lang.scala.{Observable, Observer}
@@ -58,12 +50,11 @@ class JobRuntimeService(
     val faults: mutable.ArrayBuffer[BreakpointFault] = new ArrayBuffer[BreakpointFault]()
   }
 
-  var executionID: UInteger = _
+  workflowContext.executionID = null // for every new execution, reset it to null, so that the value doesn't carry over across executions
   val operatorRuntimeStateMap: mutable.HashMap[String, OperatorRuntimeState] =
     new mutable.HashMap[String, OperatorRuntimeState]()
   var workflowError: Throwable = _
-  val executionsMetadataPersistService: ExecutionsMetadataPersistService =
-    new ExecutionsMetadataPersistService()
+
   registerCallbacks()
 
   private[this] def registerCallbacks(): Unit = {
@@ -115,7 +106,7 @@ class JobRuntimeService(
       .subscribe((evt: WorkflowCompleted) => {
         client.shutdown()
         if (workflowContext.userId != None) {
-          executionsMetadataPersistService.updateExistingExecution(executionID, Completed.code)
+          ExecutionsMetadataPersistService.updateExistingExecution(workflowContext.executionID, Completed.code)
         }
         workflowStatus.onNext(Completed)
       })
@@ -137,7 +128,7 @@ class JobRuntimeService(
         client.shutdown()
         workflowError = evt.e
         if (workflowContext.userId != None) {
-          executionsMetadataPersistService.updateExistingExecution(executionID, Aborted.code)
+          ExecutionsMetadataPersistService.updateExistingExecution(workflowContext.executionID, Aborted.code)
         }
         workflowStatus.onNext(Aborted)
         send(WorkflowExecutionErrorEvent(evt.e.getLocalizedMessage))
@@ -153,8 +144,8 @@ class JobRuntimeService(
     workflowStatus.onNext(Initializing)
     f.onSuccess { _ =>
       if (workflowContext.userId != None) {
-        executionID =
-          executionsMetadataPersistService.insertNewExecution(UInteger.valueOf(workflowContext.wId))
+        workflowContext.executionID =
+          ExecutionsMetadataPersistService.insertNewExecution(UInteger.valueOf(workflowContext.wId))
       }
       workflowStatus.onNext(Running)
     }
@@ -249,7 +240,7 @@ class JobRuntimeService(
     workflowStatus.onNext(Resuming)
     f.onSuccess { _ =>
       if (workflowContext.userId != None) {
-        executionsMetadataPersistService.updateExistingExecution(executionID, Running.code)
+        ExecutionsMetadataPersistService.updateExistingExecution(workflowContext.executionID, Running.code)
       }
       workflowStatus.onNext(Running)
     }
@@ -260,7 +251,7 @@ class JobRuntimeService(
     workflowStatus.onNext(Pausing)
     f.onSuccess { _ =>
       if (workflowContext.userId != None) {
-        executionsMetadataPersistService.updateExistingExecution(executionID, Paused.code)
+        ExecutionsMetadataPersistService.updateExistingExecution(workflowContext.executionID, Paused.code)
       }
       workflowStatus.onNext(Paused)
     }
@@ -272,7 +263,7 @@ class JobRuntimeService(
     workflowStatus.onNext(Resuming)
     f.onSuccess { _ =>
       if (workflowContext.userId != None) {
-        executionsMetadataPersistService.updateExistingExecution(executionID, Running.code)
+        ExecutionsMetadataPersistService.updateExistingExecution(workflowContext.executionID, Running.code)
       }
       workflowStatus.onNext(Running)
     }
@@ -281,7 +272,7 @@ class JobRuntimeService(
   def killWorkflow(): Unit = {
     client.shutdown()
     if (workflowContext.userId != None) {
-      executionsMetadataPersistService.updateExistingExecution(executionID, Aborted.code)
+      ExecutionsMetadataPersistService.updateExistingExecution(workflowContext.executionID, Aborted.code)
     }
     workflowStatus.onNext(Completed)
   }
