@@ -9,16 +9,13 @@ from pampy import match
 from pyarrow import Schema
 
 from core.models import ControlElement, DataElement
-from core.models.worker_proxy import WorkerProxy
+from pyamber.worker_proxy import WorkerProxy
 from core.util import get_one_of, set_one_of
 from core.util.arrow_utils import from_arrow_schema
 
-from proto.edu.uci.ics.amber.engine.architecture.sendsemantics import OneToOnePartitioning, Partitioning
-from proto.edu.uci.ics.amber.engine.architecture.worker import WorkerExecutionCompletedV2, PauseWorkerV2, \
-    ResumeWorkerV2, InitializeOperatorLogicV2, OpenOperatorV2, UpdateInputLinkingV2, AddPartitioningV2, StartWorkerV2, \
-    QueryStatisticsV2
-from proto.edu.uci.ics.amber.engine.common import ControlPayloadV2, ControlInvocationV2, ReturnInvocationV2, \
-    LinkIdentity, LayerIdentity, ActorVirtualIdentity
+from proto.edu.uci.ics.amber.engine.architecture.sendsemantics import *
+from proto.edu.uci.ics.amber.engine.architecture.worker import *
+from proto.edu.uci.ics.amber.engine.common import *
 
 
 class Controller(threading.Thread):

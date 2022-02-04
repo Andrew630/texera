@@ -1,14 +1,10 @@
 from typing import Union, Iterator, Optional
 
-from loguru import logger
-
 from core.models import Tuple, InputExhausted, TupleLike
 from core.models.operator import metadata
 from core.models.workflow import Workflow, Link
 from pytexera import UDFOperator
-
-logger.remove()
-logger.add(open("python.log", "w+"), level="DEBUG")
+from pytexera.workflow_driver import WorkflowDriver
 
 
 @metadata(output_schema={'time': 'timestamp', 'id': 'integer'}, is_source=True)
@@ -39,7 +35,7 @@ class Op2(UDFOperator):
 class Op3(UDFOperator):
     def open(self):
         import csv
-        self.out_file = open("out.csv", 'w+')
+        self.out_file = open("../../../../../log/out.csv", 'w+')
         self.writer = csv.writer(self.out_file)
 
     def process_tuple(self, tuple_: Union[Tuple, InputExhausted], input_: int) -> Iterator[Optional[TupleLike]]:
@@ -63,5 +59,6 @@ if __name__ == '__main__':
     wf.add_link(Link(op1_id, op2_id))
     wf.add_link(Link(op2_id, op3_id))
     wf.add_link(Link(op3_id, "CONTROLLER"))
-    wf.start()
-    wf.interact()
+    workflow_driver = WorkflowDriver(wf)
+    workflow_driver.start()
+    workflow_driver.interact()
