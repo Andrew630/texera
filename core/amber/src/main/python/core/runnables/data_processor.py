@@ -1,5 +1,7 @@
+import threading
 import traceback
 import typing
+from queue import Queue
 from typing import Iterator, List, MutableMapping, Optional, Union
 
 from loguru import logger
@@ -11,12 +13,24 @@ from core.architecture.packaging.batch_to_tuple_converter import EndOfAllMarker
 from core.architecture.rpc.async_rpc_client import AsyncRPCClient
 from core.architecture.rpc.async_rpc_server import AsyncRPCServer
 from core.models import ControlElement, DataElement, InputExhausted, InternalQueue, Operator, SenderChangeMarker, Tuple
+from core.runnables.data_processor_real import DataProcessorReal
 from core.util import IQueue, StoppableQueueBlockingRunnable, get_one_of, set_one_of
 from core.util.print_writer.print_log_handler import PrintLogHandler
 from proto.edu.uci.ics.amber.engine.architecture.worker import ControlCommandV2, LocalOperatorExceptionV2, \
     PythonPrintV2, WorkerExecutionCompletedV2, WorkerState
 from proto.edu.uci.ics.amber.engine.common import ActorVirtualIdentity, ControlInvocationV2, ControlPayloadV2, \
     LinkIdentity, ReturnInvocationV2
+
+
+class Option:
+    def __init__(self, val=None):
+        self.set(val)
+
+    def set(self, val):
+        self.val = val
+
+    def get(self):
+        return self.val
 
 
 class DataProcessor(StoppableQueueBlockingRunnable):
@@ -26,7 +40,7 @@ class DataProcessor(StoppableQueueBlockingRunnable):
 
         self._input_queue: InternalQueue = input_queue
         self._output_queue: InternalQueue = output_queue
-        self._operator: Optional[Operator] = None
+        self._operator: Optional[Operator] = Option()
         self._current_input_tuple: Optional[Union[Tuple, InputExhausted]] = None
         self._current_input_link: Optional[LinkIdentity] = None
         self._current_input_tuple_iter: Optional[Iterator[Union[Tuple, InputExhausted]]] = None
@@ -47,6 +61,12 @@ class DataProcessor(StoppableQueueBlockingRunnable):
             level='PRINT',
             filter="operators"
         )
+        self._data_input_queue = Queue()
+        self._data_output_queue = Queue()
+        self._dp_process_condition = threading.Condition()
+        self.data_processor_real = DataProcessorReal(self._data_input_queue, self._data_output_queue, self._operator,
+                                                     self._dp_process_condition)
+        threading.Thread(target=self.data_processor_real.run, daemon=True).start()
 
     def complete(self) -> None:
         """
@@ -54,7 +74,8 @@ class DataProcessor(StoppableQueueBlockingRunnable):
         """
         # flush the buffered console prints
         self._print_log_handler.flush()
-        self._operator.close()
+        self._operator.get().close()
+        self.data_processor_real._running.clear()
         self.context.state_manager.transit_to(WorkerState.COMPLETED)
         control_command = set_one_of(ControlCommandV2, WorkerExecutionCompletedV2())
         self._async_rpc_client.send(ActorVirtualIdentity(name="CONTROLLER"), control_command)
@@ -121,9 +142,10 @@ class DataProcessor(StoppableQueueBlockingRunnable):
             for output_tuple in self.process_tuple_with_udf(self._current_input_tuple, self._current_input_link):
                 self.check_and_process_control()
                 if output_tuple is not None:
+
                     self.context.statistics_manager.increase_output_tuple_count()
                     for to, batch in self.context.tuple_to_batch_converter.tuple_to_batch(output_tuple):
-                        batch.schema = self._operator.output_schema
+                        batch.schema = self._operator.get().output_schema
                         self._output_queue.put(DataElement(tag=to, payload=batch))
         except Exception as err:
             logger.exception(err)
@@ -141,15 +163,32 @@ class DataProcessor(StoppableQueueBlockingRunnable):
         :param link: LinkIdentity, the current link.
         :return: Iterator[Tuple], iterator of result Tuple(s).
         """
-
         # bind link with input index
         if link not in self._input_link_map:
             self._input_links.append(link)
             index = len(self._input_links) - 1
             self._input_link_map[link] = index
         input_ = self._input_link_map[link]
+        self._data_input_queue.put((tuple_, input_))
+        self.data_processor_real._finished_current.clear()
+        with self._dp_process_condition:
+            self._dp_process_condition.notify()
+            self._dp_process_condition.wait()
+        # print("cp being notified, try to collect outputs")
+        outputs = []
+        while not  self.data_processor_real._finished_current.is_set():
 
-        return map(lambda t: Tuple(t) if t is not None else None, self._operator.process_tuple(tuple_, input_))
+            num_outputs = self._data_output_queue.qsize()
+            # print("out", num_outputs)
+            # print("in", self._data_input_queue.qsize())
+
+            if num_outputs:
+                for _ in range(num_outputs):
+                    yield self._data_output_queue.get()
+
+            with self._dp_process_condition:
+                self._dp_process_condition.notify()
+                self._dp_process_condition.wait()
 
     def report_exception(self) -> None:
         """
@@ -191,7 +230,7 @@ class DataProcessor(StoppableQueueBlockingRunnable):
         :param _: EndOfAllMarker
         """
         for to, batch in self.context.tuple_to_batch_converter.emit_end_of_upstream():
-            batch.schema = self._operator.output_schema
+            batch.schema = self._operator.get().output_schema
             self._output_queue.put(DataElement(tag=to, payload=batch))
             self.check_and_process_control()
         self.complete()

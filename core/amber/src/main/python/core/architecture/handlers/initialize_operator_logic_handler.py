@@ -10,5 +10,5 @@ class InitializeOperatorLogicHandler(Handler):
 
     def __call__(self, context: Context, command: cmd, *args, **kwargs):
         operator: type(Operator) = load_operator(command.code)
-        context.dp._operator = operator()
+        context.dp._operator.set(operator())
         return None

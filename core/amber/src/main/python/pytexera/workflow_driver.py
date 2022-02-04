@@ -22,7 +22,10 @@ class WorkflowDriver:
         while True:
             line = input(">")
             commands = tuple(line.split())
-            if commands[0] not in self.controller.available_user_commands:
+            if commands[0] == "quit":
+                return
+            elif commands[0] not in self.controller.available_user_commands:
                 print(f"non-recognized command {commands}, please try again")
                 continue
+
             self.controller_queue.put(commands)

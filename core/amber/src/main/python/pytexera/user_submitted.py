@@ -8,14 +8,16 @@ from pytexera.workflow_driver import WorkflowDriver
 @metadata(output_schema={'time': 'timestamp', 'id': 'integer'}, is_source=True)
 class Op1(UDFOperator):
     def open(self):
-        self.cap = 200
+        self.cap = 30
 
     def process_tuple(self, tuple_: Union[Tuple, InputExhausted], input_: int) -> Iterator[Optional[TupleLike]]:
         import time
         i = 0
         while i < self.cap:
             i += 1
+            yield
             time.sleep(0.1)
+            yield
             from datetime import datetime
             now = datetime.now()
             yield {'time': now, 'id': i}
