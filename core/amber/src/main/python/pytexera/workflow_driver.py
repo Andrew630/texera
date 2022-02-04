@@ -2,7 +2,7 @@ from queue import Queue
 
 from loguru import logger
 
-from core.models.workflow import Workflow
+from core.models import Workflow
 from pyamber.mock_controller import Controller
 
 
@@ -19,7 +19,6 @@ class WorkflowDriver:
         self.controller.start()
 
     def interact(self):
-
         while True:
             line = input(">")
             commands = tuple(line.split())

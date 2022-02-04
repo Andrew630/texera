@@ -9,10 +9,10 @@ from pampy import match
 from pyarrow import Schema
 
 from core.models import ControlElement, DataElement
-from pyamber.worker_proxy import WorkerProxy
 from core.util import get_one_of, set_one_of
 from core.util.arrow_utils import from_arrow_schema
 
+from pyamber.worker_proxy import WorkerProxy
 from proto.edu.uci.ics.amber.engine.architecture.sendsemantics import *
 from proto.edu.uci.ics.amber.engine.architecture.worker import *
 from proto.edu.uci.ics.amber.engine.common import *
@@ -25,8 +25,9 @@ class Controller(threading.Thread):
         self._workflow = workflow
         self._input_queue = input_queue
         self._worker_status = {}
-        self.initialize()
+        self._worker_proxies: Dict[str, WorkerProxy] = dict()
         self._running = True
+        self.initialize()
 
     def run(self):
         while self._running:
@@ -37,7 +38,6 @@ class Controller(threading.Thread):
                 self.process(msg)
 
     def process(self, msg: ControlElement):
-        # print(f"controller processing {msg}")
         self.process_control_payload(msg.tag, msg.payload)
 
     def process_control_payload(self, tag: ActorVirtualIdentity, payload: ControlPayloadV2) -> None:
@@ -46,7 +46,6 @@ class Controller(threading.Thread):
         :param tag: ActorVirtualIdentity, the sender.
         :param payload: ControlPayloadV2 to be handled.
         """
-        # logger.debug(f"processing one CONTROL: {payload} from {tag}")
         match(
             (tag, get_one_of(payload)),
             typing.Tuple[ActorVirtualIdentity, ControlInvocationV2], self._process_control_invocation,
@@ -54,8 +53,6 @@ class Controller(threading.Thread):
         )
 
     def _process_control_return(self, tag, return_invocation: ReturnInvocationV2):
-
-        # print(return_invocation.control_return)
         if return_invocation.control_return.worker_state:
             self._worker_status[tag] = return_invocation.control_return.worker_state
         elif return_invocation.control_return.worker_statistics:
@@ -68,7 +65,7 @@ class Controller(threading.Thread):
         if command == WorkerExecutionCompletedV2():
             self._worker_status[tag] = "Done"
             if all(i == "Done" for i in self._worker_status.values()):
-                for proxy in self._workflow.worker_proxies.values():
+                for proxy in self._worker_proxies.values():
                     proxy.process.kill()
                     logger.debug(f"killed {proxy.id}")
                 self._running = False
@@ -77,7 +74,7 @@ class Controller(threading.Thread):
 
     def broadcast(self, cmd, target_proxies=None):
         if target_proxies is None:
-            target_proxies = self._workflow.worker_proxies.values()
+            target_proxies = self._worker_proxies.values()
         for target_proxy in target_proxies:
             target_proxy.send_cmd(cmd)
 
@@ -89,7 +86,7 @@ class Controller(threading.Thread):
                     vid = msg.tag
                     dst_id = vid.name
                     if dst_id != "CONTROLLER":
-                        dst_worker_proxy = self._workflow.worker_proxies[dst_id]
+                        dst_worker_proxy = self._worker_proxies[dst_id]
                         dst_worker_proxy.send_data(msg)
                 elif isinstance(msg, ControlElement):
                     msg.tag = ActorVirtualIdentity(worker_proxy.id)
@@ -97,7 +94,7 @@ class Controller(threading.Thread):
 
         for oid, operator in self._workflow.operators.items():
             worker_proxy = WorkerProxy()
-            self._workflow.worker_proxies[oid] = worker_proxy
+            self._worker_proxies[oid] = worker_proxy
             time.sleep(1)
 
             is_source = operator.is_source
@@ -115,18 +112,18 @@ from typing import Union, Optional, Iterator
                                           output_schema=from_arrow_schema(output_schema)))
             worker_proxy.send_cmd(OpenOperatorV2())
 
-        for oid, worker_proxy in dict(self._workflow.worker_proxies).items():
+        for oid, worker_proxy in dict(self._worker_proxies).items():
             threading.Thread(target=message_forwarder, args=(worker_proxy,), daemon=True).start()
 
         for lid, link in self._workflow.links.items():
-            src_op_proxy = self._workflow.worker_proxies[link.from_]
+            src_op_proxy = self._worker_proxies[link.from_]
             partitioning = set_one_of(Partitioning, OneToOnePartitioning(1, [ActorVirtualIdentity(link.to)]))
             link_id = LinkIdentity(from_=LayerIdentity("", link.from_, ""), to=LayerIdentity("", link.to, ""))
             src_op_proxy.send_cmd(UpdateInputLinkingV2(ActorVirtualIdentity(link.from_), link_id))
             src_op_proxy.send_cmd(AddPartitioningV2(link_id, partitioning))
 
         for oid, operator in self._workflow.operators.items():
-            worker_proxy = self._workflow.worker_proxies[oid]
+            worker_proxy = self._worker_proxies[oid]
             if operator.is_source:
                 worker_proxy.send_cmd(StartWorkerV2())
             worker_proxy.send_cmd(QueryStatisticsV2())

@@ -4,3 +4,6 @@ from .tuple import InputExhausted, Tuple, TupleLike, ArrowTableTupleProvider
 from .table import Table, TableLike
 from .operator import Operator, TupleOperator, TableOperator, metadata
 from .payload import InputDataFrame, OutputDataFrame, DataPayload, EndOfUpstream
+from .link import Link
+from .workflow import Workflow
+

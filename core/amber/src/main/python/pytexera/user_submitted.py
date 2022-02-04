@@ -1,8 +1,6 @@
 from typing import Union, Iterator, Optional
 
-from core.models import Tuple, InputExhausted, TupleLike
-from core.models.operator import metadata
-from core.models.workflow import Workflow, Link
+from core.models import Tuple, InputExhausted, TupleLike, metadata, Workflow, Link
 from pytexera import UDFOperator
 from pytexera.workflow_driver import WorkflowDriver
 
@@ -50,15 +48,13 @@ class Op3(UDFOperator):
 
 if __name__ == '__main__':
     wf = Workflow()
-    op1 = Op1()
-    op1_id = wf.add_operator(op1)
-    op2 = Op2()
-    op2_id = wf.add_operator(op2)
-    op3 = Op3()
-    op3_id = wf.add_operator(op3)
+    op1_id = wf.add_operator(Op1())
+    op2_id = wf.add_operator(Op2())
+    op3_id = wf.add_operator(Op3())
     wf.add_link(Link(op1_id, op2_id))
     wf.add_link(Link(op2_id, op3_id))
     wf.add_link(Link(op3_id, "CONTROLLER"))
+
     workflow_driver = WorkflowDriver(wf)
     workflow_driver.start()
     workflow_driver.interact()
