@@ -20,11 +20,11 @@ class WorkerProxy:
         self._input_queue = InternalQueue()
         self._output_queue = InternalQueue()
         self.process = subprocess.Popen(
-            ["python", "../texera_run_python_worker.py", str(self.input_port), str(self.output_port), "ERROR"])
+            ["python", "../texera_run_python_worker.py", str(self.input_port), str(self.output_port), "INFO"])
         connected = False
         while not connected:
             try:
-                time.sleep(1)
+                time.sleep(0.5)
                 logger.debug(f"trying to connect input_port={self.input_port}, output_port={self.output_port}")
                 self.network_receiver = NetworkReceiver(self._output_queue, host="0.0.0.0", port=self.output_port)
                 threading.Thread(target=self.network_receiver.run, daemon=True).start()

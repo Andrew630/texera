@@ -1,6 +1,7 @@
 from loguru import logger
 
 from core.architecture.handlers.add_partitioning_handler import AddPartitioningHandler
+from core.architecture.handlers.debug_command_handler import DebugCommandHandler
 from core.architecture.handlers.echo_handler import EchoHandler
 from core.architecture.handlers.evaluate_expression_handler import EvaluateExpressionHandler
 from core.architecture.handlers.handler_base import Handler
@@ -40,6 +41,7 @@ class AsyncRPCServer:
         self.register(ReplayCurrentTupleHandler())
         self.register(EvaluateExpressionHandler())
         self.register(EchoHandler())
+        self.register(DebugCommandHandler())
 
     def receive(self, from_: ActorVirtualIdentity, control_invocation: ControlInvocationV2):
         command: ControlCommandV2 = get_one_of(control_invocation.command)

@@ -5,7 +5,7 @@ import typing
 from queue import Queue
 
 from loguru import logger
-from pampy import match
+from pampy import match, TAIL
 from pyarrow import Schema
 
 from core.models import ControlElement, DataElement
@@ -21,7 +21,7 @@ from proto.edu.uci.ics.amber.engine.common import *
 class Controller(threading.Thread):
     def __init__(self, workflow, input_queue: Queue):
         super().__init__()
-        self.available_user_commands = ['pause', 'resume']
+        self.available_user_commands = ['pause', 'resume', '˚breakpoint']
         self._workflow = workflow
         self._input_queue = input_queue
         self._worker_status = {}
@@ -69,8 +69,6 @@ class Controller(threading.Thread):
                     proxy.process.kill()
                     logger.debug(f"killed {proxy.id}")
                 self._running = False
-        elif command in [PauseWorkerV2(), ResumeWorkerV2()]:
-            self.broadcast(command)
 
     def broadcast(self, cmd, target_proxies=None):
         if target_proxies is None:
@@ -132,5 +130,6 @@ from typing import Union, Optional, Iterator
         match(
             msg,
             ("pause",), lambda _: self.broadcast(PauseWorkerV2()),
-            ("resume",), lambda _: self.broadcast(ResumeWorkerV2())
+            ("resume",), lambda _: self.broadcast(ResumeWorkerV2()),
+            ("breakpoint", TAIL), lambda _: self.broadcast(DebugCommandV2(' '.join(msg)))
         )

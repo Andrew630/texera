@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Dict, List
 
 import betterproto
+from betterproto.grpc.grpclib_server import ServiceBase
 
 
 class WorkerState(betterproto.Enum):
@@ -103,6 +104,11 @@ class EchoV2(betterproto.Message):
 
 
 @dataclass(eq=False, repr=False)
+class DebugCommandV2(betterproto.Message):
+    cmd: str = betterproto.string_field(1)
+
+
+@dataclass(eq=False, repr=False)
 class ControlCommandV2(betterproto.Message):
     start_worker: "StartWorkerV2" = betterproto.message_field(1, group="sealed_value")
     pause_worker: "PauseWorkerV2" = betterproto.message_field(2, group="sealed_value")
@@ -135,6 +141,9 @@ class ControlCommandV2(betterproto.Message):
     )
     evaluate_expression: "EvaluateExpressionV2" = betterproto.message_field(
         25, group="sealed_value"
+    )
+    debug_command: "DebugCommandV2" = betterproto.message_field(
+        41, group="sealed_value"
     )
     worker_execution_completed: "WorkerExecutionCompletedV2" = (
         betterproto.message_field(101, group="sealed_value")
