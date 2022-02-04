@@ -1,0 +1,142 @@
+import inspect
+import threading
+import time
+import typing
+from queue import Queue
+
+from loguru import logger
+from pampy import match
+from pyarrow import Schema
+
+from core.models import ControlElement, DataElement
+from core.models.worker_proxy import WorkerProxy
+from core.util import get_one_of, set_one_of
+from core.util.arrow_utils import from_arrow_schema
+
+from proto.edu.uci.ics.amber.engine.architecture.sendsemantics import OneToOnePartitioning, Partitioning
+from proto.edu.uci.ics.amber.engine.architecture.worker import WorkerExecutionCompletedV2, PauseWorkerV2, \
+    ResumeWorkerV2, InitializeOperatorLogicV2, OpenOperatorV2, UpdateInputLinkingV2, AddPartitioningV2, StartWorkerV2, \
+    QueryStatisticsV2
+from proto.edu.uci.ics.amber.engine.common import ControlPayloadV2, ControlInvocationV2, ReturnInvocationV2, \
+    LinkIdentity, LayerIdentity, ActorVirtualIdentity
+
+
+class Controller(threading.Thread):
+    def __init__(self, workflow, input_queue: Queue):
+        super().__init__()
+        self.available_user_commands = ['pause', 'resume']
+        self._workflow = workflow
+        self._input_queue = input_queue
+        self._worker_status = {}
+        self.initialize()
+        self._running = True
+
+    def run(self):
+        while self._running:
+            msg = self._input_queue.get()
+            if isinstance(msg, tuple):
+                self.process_user_command(msg)
+            else:
+                self.process(msg)
+
+    def process(self, msg: ControlElement):
+        # print(f"controller processing {msg}")
+        self.process_control_payload(msg.tag, msg.payload)
+
+    def process_control_payload(self, tag: ActorVirtualIdentity, payload: ControlPayloadV2) -> None:
+        """
+        Process the given ControlPayload with the tag.
+        :param tag: ActorVirtualIdentity, the sender.
+        :param payload: ControlPayloadV2 to be handled.
+        """
+        # logger.debug(f"processing one CONTROL: {payload} from {tag}")
+        match(
+            (tag, get_one_of(payload)),
+            typing.Tuple[ActorVirtualIdentity, ControlInvocationV2], self._process_control_invocation,
+            typing.Tuple[ActorVirtualIdentity, ReturnInvocationV2], self._process_control_return
+        )
+
+    def _process_control_return(self, tag, return_invocation: ReturnInvocationV2):
+
+        # print(return_invocation.control_return)
+        if return_invocation.control_return.worker_state:
+            self._worker_status[tag] = return_invocation.control_return.worker_state
+        elif return_invocation.control_return.worker_statistics:
+            statistics = return_invocation.control_return.worker_statistics
+            self._worker_status[tag] = statistics.worker_state
+
+    def _process_control_invocation(self, tag, control_invocation: ControlInvocationV2):
+        command = get_one_of(control_invocation.command)
+        logger.debug(command)
+        if command == WorkerExecutionCompletedV2():
+            self._worker_status[tag] = "Done"
+            if all(i == "Done" for i in self._worker_status.values()):
+                for proxy in self._workflow.worker_proxies.values():
+                    proxy.process.kill()
+                    logger.debug(f"killed {proxy.id}")
+                self._running = False
+        elif command in [PauseWorkerV2(), ResumeWorkerV2()]:
+            self.broadcast(command)
+
+    def broadcast(self, cmd, target_proxies=None):
+        if target_proxies is None:
+            target_proxies = self._workflow.worker_proxies.values()
+        for target_proxy in target_proxies:
+            target_proxy.send_cmd(cmd)
+
+    def initialize(self):
+        def message_forwarder(worker_proxy):
+            while True:
+                msg = worker_proxy._output_queue.get()
+                if isinstance(msg, DataElement):
+                    vid = msg.tag
+                    dst_id = vid.name
+                    if dst_id != "CONTROLLER":
+                        dst_worker_proxy = self._workflow.worker_proxies[dst_id]
+                        dst_worker_proxy.send_data(msg)
+                elif isinstance(msg, ControlElement):
+                    msg.tag = ActorVirtualIdentity(worker_proxy.id)
+                    self._input_queue.put(msg)
+
+        for oid, operator in self._workflow.operators.items():
+            worker_proxy = WorkerProxy()
+            self._workflow.worker_proxies[oid] = worker_proxy
+            time.sleep(1)
+
+            is_source = operator.is_source
+
+            code = """
+from pytexera import *
+from typing import Union, Optional, Iterator           
+""" + inspect.getsource(operator.__class__)
+
+            operator.init_output_schema()
+            output_schema: Schema = operator.output_schema
+
+            worker_proxy.send_cmd(
+                InitializeOperatorLogicV2(code=code, is_source=is_source,
+                                          output_schema=from_arrow_schema(output_schema)))
+            worker_proxy.send_cmd(OpenOperatorV2())
+
+        for oid, worker_proxy in dict(self._workflow.worker_proxies).items():
+            threading.Thread(target=message_forwarder, args=(worker_proxy,), daemon=True).start()
+
+        for lid, link in self._workflow.links.items():
+            src_op_proxy = self._workflow.worker_proxies[link.from_]
+            partitioning = set_one_of(Partitioning, OneToOnePartitioning(1, [ActorVirtualIdentity(link.to)]))
+            link_id = LinkIdentity(from_=LayerIdentity("", link.from_, ""), to=LayerIdentity("", link.to, ""))
+            src_op_proxy.send_cmd(UpdateInputLinkingV2(ActorVirtualIdentity(link.from_), link_id))
+            src_op_proxy.send_cmd(AddPartitioningV2(link_id, partitioning))
+
+        for oid, operator in self._workflow.operators.items():
+            worker_proxy = self._workflow.worker_proxies[oid]
+            if operator.is_source:
+                worker_proxy.send_cmd(StartWorkerV2())
+            worker_proxy.send_cmd(QueryStatisticsV2())
+
+    def process_user_command(self, msg: typing.Tuple[str]):
+        match(
+            msg,
+            ("pause",), lambda _: self.broadcast(PauseWorkerV2()),
+            ("resume",), lambda _: self.broadcast(ResumeWorkerV2())
+        )

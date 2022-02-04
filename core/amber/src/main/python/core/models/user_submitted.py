@@ -9,16 +9,18 @@ from pytexera import UDFOperator
 
 logger.remove()
 logger.add(open("python.log", "w+"), level="DEBUG")
+
+
 @metadata(output_schema={'time': 'timestamp', 'id': 'integer'}, is_source=True)
 class Op1(UDFOperator):
     def open(self):
-        self.cap = 100
+        self.cap = 200
 
     def process_tuple(self, tuple_: Union[Tuple, InputExhausted], input_: int) -> Iterator[Optional[TupleLike]]:
         import time
         i = 0
         while i < self.cap:
-            i +=1
+            i += 1
             time.sleep(0.1)
             from datetime import datetime
             now = datetime.now()
@@ -62,4 +64,4 @@ if __name__ == '__main__':
     wf.add_link(Link(op2_id, op3_id))
     wf.add_link(Link(op3_id, "CONTROLLER"))
     wf.start()
-
+    wf.interact()
