@@ -56,6 +56,12 @@ class ControllerAsyncRPCHandlerInitializer(
     new mutable.HashMap[OperatorIdentity, Long]()
   var operatorEndTime: mutable.HashMap[OperatorIdentity, Long] =
     new mutable.HashMap[OperatorIdentity, Long]()
+  var workerStartTime: mutable.HashMap[ActorVirtualIdentity, Long] =
+    new mutable.HashMap[ActorVirtualIdentity, Long]()
+  var workerEndTime: mutable.HashMap[ActorVirtualIdentity, Long] =
+    new mutable.HashMap[ActorVirtualIdentity, Long]()
+  var workerStatisticsTime: mutable.HashMap[ActorVirtualIdentity, Long] =
+    new mutable.HashMap[ActorVirtualIdentity, Long]()
 
   def enableStatusUpdate(): Unit = {
     if (controllerConfig.statusUpdateIntervalMs.nonEmpty && statusUpdateAskHandle.isEmpty) {

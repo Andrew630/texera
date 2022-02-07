@@ -3,11 +3,12 @@ package edu.uci.ics.amber.engine.architecture.controller.promisehandlers
 import com.twitter.util.Future
 import edu.uci.ics.amber.engine.architecture.controller.ControllerAsyncRPCHandlerInitializer
 import edu.uci.ics.amber.engine.architecture.controller.ControllerEvent.WorkflowStatusUpdate
-
 import edu.uci.ics.amber.engine.architecture.controller.promisehandlers.QueryWorkerStatisticsHandler.ControllerInitiateQueryStatistics
 import edu.uci.ics.amber.engine.architecture.worker.promisehandlers.QueryStatisticsHandler.QueryStatistics
 import edu.uci.ics.amber.engine.common.rpc.AsyncRPCServer.ControlCommand
 import edu.uci.ics.amber.engine.common.virtualidentity.ActorVirtualIdentity
+
+import java.util.Calendar
 
 object QueryWorkerStatisticsHandler {
 
@@ -32,8 +33,26 @@ trait QueryWorkerStatisticsHandler {
     val requests = workers.map(worker =>
       // must immediately update worker state and stats after reply
       send(QueryStatistics(), worker).map(res => {
+        if (workerStatisticsTime.contains(worker)) {
+          val oldInputCount = workflow.getOperator(worker).getWorker(worker).stats.inputTupleCount
+          val newInputCount = res.inputTupleCount
+          val oldOutputCount = workflow.getOperator(worker).getWorker(worker).stats.outputTupleCount
+          val newOutputCount = res.outputTupleCount
+
+          val now = Calendar.getInstance()
+          val hh = now.get(Calendar.HOUR)
+          val mm = now.get(Calendar.MINUTE)
+          val ss = now.get(Calendar.SECOND)
+
+          println(
+            s"\t THROUGHPUT for ${worker.toString()} at ${hh}:${mm}:${ss}: Input ${(newInputCount - oldInputCount) / ((System
+              .nanoTime() - workerStatisticsTime(worker)) / 1e9d)}, Output ${(newOutputCount - oldOutputCount) / ((System
+              .nanoTime() - workerStatisticsTime(worker)) / 1e9d)}"
+          )
+        }
         workflow.getOperator(worker).getWorker(worker).state = res.workerState
         workflow.getOperator(worker).getWorker(worker).stats = res
+        workerStatisticsTime(worker) = System.nanoTime()
       })
     )
 

@@ -23,6 +23,7 @@ trait WorkerExecutionStartedHandler {
       if (!operatorStartTime.contains(opID)) {
         operatorStartTime(opID) = System.nanoTime()
       }
+      workerStartTime(sender) = System.nanoTime()
       // set the state
       workflow.getOperator(sender).getWorker(sender).state = msg.state
       sendToClient(WorkflowStatusUpdate(workflow.getWorkflowStatus))
