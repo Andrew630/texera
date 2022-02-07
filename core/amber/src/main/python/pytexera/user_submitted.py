@@ -1,6 +1,7 @@
 from typing import Union, Iterator, Optional
 
 from core.models import Tuple, InputExhausted, TupleLike, metadata, Workflow, Link
+from core.util import get_root
 from pytexera import UDFOperator
 from pytexera.workflow_driver import WorkflowDriver
 
