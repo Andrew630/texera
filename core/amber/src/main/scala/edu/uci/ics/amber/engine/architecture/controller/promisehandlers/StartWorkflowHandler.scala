@@ -41,6 +41,7 @@ trait StartWorkflowHandler {
                     // update worker state
                     workflow.getWorkerInfo(worker).state = ret
                     operatorStartTime(workflow.getOperator(worker).id) = System.nanoTime()
+                    workerStartTime(worker) = System.nanoTime()
                   }
                 }
               }
