@@ -77,6 +77,7 @@ class WorkerLayer(
             .withDeploy(Deploy(scope = RemoteScope(address)))
         }
       )
+      println(s"\tDEPLOYMENT OF WORKER ${workerId.toString()} at ${address.host.get}")
       parentNetworkCommunicationActorRef ! RegisterActorRef(workerId, ref)
       workerToLayer(workerId) = this
       workerId -> WorkerInfo(
