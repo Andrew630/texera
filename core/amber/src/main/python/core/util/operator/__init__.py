@@ -4,8 +4,9 @@ import sys
 from core.models import Operator
 from core.util import gen_uuid, get_root
 
+modules = []
 
-def load_operator(code: str) -> type(Operator):
+def load_operator( code: str) -> type(Operator):
     """
     Load the given operator code in string into a class definition
     :param code: str, python code that defines an Operator, should contain one
@@ -20,6 +21,7 @@ def load_operator(code: str) -> type(Operator):
     sys.path.append(str(get_root()))
     operator_module = importlib.import_module(module_name)
     operators = list(filter(is_concrete_operator, operator_module.__dict__.values()))
+    modules.append(module_name)
     assert len(operators) == 1, "There should be one and only one Operator defined"
     return operators[0]
 

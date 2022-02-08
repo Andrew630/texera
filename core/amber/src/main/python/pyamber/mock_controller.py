@@ -21,7 +21,8 @@ from proto.edu.uci.ics.amber.engine.common import *
 class Controller(threading.Thread):
     def __init__(self, workflow, input_queue: Queue):
         super().__init__()
-        self.available_user_commands = ['pause', 'resume', '˚breakpoint']
+        self.available_user_commands = {'pause': PauseWorkerV2(), 'resume': ResumeWorkerV2(),
+                                        'stats': QueryStatisticsV2(), 'breakpoint': DebugCommandV2()}
         self._workflow = workflow
         self._input_queue = input_queue
         self._worker_status = {}
@@ -58,6 +59,7 @@ class Controller(threading.Thread):
         elif return_invocation.control_return.worker_statistics:
             statistics = return_invocation.control_return.worker_statistics
             self._worker_status[tag] = statistics.worker_state
+            print(f"{tag}:{self._worker_status[tag]}-{statistics.input_tuple_count}/{statistics.output_tuple_count}")
 
     def _process_control_invocation(self, tag, control_invocation: ControlInvocationV2):
         command = get_one_of(control_invocation.command)
@@ -70,9 +72,13 @@ class Controller(threading.Thread):
                     logger.debug(f"killed {proxy.id}")
                 self._running = False
 
-    def broadcast(self, cmd, target_proxies=None):
-        if target_proxies is None:
+    def broadcast(self, cmd, targets=None):
+        if isinstance(cmd, tuple):
+            cmd = self.available_user_commands[cmd[0]]
+        if targets is None:
             target_proxies = self._worker_proxies.values()
+        else:
+            target_proxies = [self._worker_proxies[target] for target in targets]
         for target_proxy in target_proxies:
             target_proxy.send_cmd(cmd)
 
@@ -91,12 +97,10 @@ class Controller(threading.Thread):
                     self._input_queue.put(msg)
 
         for oid, operator in self._workflow.operators.items():
-            worker_proxy = WorkerProxy()
+            worker_proxy = WorkerProxy(oid)
             self._worker_proxies[oid] = worker_proxy
-            time.sleep(1)
-
+            time.sleep(0.5)
             is_source = operator.is_source
-
             code = """
 from pytexera import *
 from typing import Union, Optional, Iterator           
@@ -129,7 +133,8 @@ from typing import Union, Optional, Iterator
     def process_user_command(self, msg: typing.Tuple[str]):
         match(
             msg,
-            ("pause",), lambda _: self.broadcast(PauseWorkerV2()),
-            ("resume",), lambda _: self.broadcast(ResumeWorkerV2()),
-            ("breakpoint", TAIL), lambda _: self.broadcast(DebugCommandV2(' '.join(msg)))
+            ("pause",), self.broadcast,
+            ("resume",), self.broadcast,
+            ("stats",), self.broadcast,
+            ("breakpoint", TAIL), lambda _: self.broadcast(DebugCommandV2(' '.join(msg)), [msg[1]])
         )

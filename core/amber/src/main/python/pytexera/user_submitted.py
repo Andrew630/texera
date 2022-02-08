@@ -1,7 +1,6 @@
 from typing import Union, Iterator, Optional
 
 from core.models import Tuple, InputExhausted, TupleLike, metadata, Workflow, Link
-from core.util import get_root
 from pytexera import UDFOperator
 from pytexera.workflow_driver import WorkflowDriver
 
@@ -14,7 +13,6 @@ class Op1(UDFOperator):
         self.cap = 100000
 
     def process_tuple(self, tuple_: Union[Tuple, InputExhausted], input_: int) -> Iterator[Optional[TupleLike]]:
-        import time
         i = 0
         while i < self.cap:
             i += 1

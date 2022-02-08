@@ -1,5 +1,5 @@
 from core.models import Operator, Link
-from core.util import gen_uuid
+from core.util import gen_uuid, gen_id
 
 
 class Workflow:
@@ -8,11 +8,11 @@ class Workflow:
         self.links = dict()
 
     def add_operator(self, operator: Operator):
-        oid = gen_uuid("op")
+        oid = gen_id("op")
         self.operators[oid] = operator
         return oid
 
     def add_link(self, link: Link):
-        lid = gen_uuid("link")
+        lid = gen_id("link")
         self.links[lid] = link
         return lid

@@ -7,14 +7,14 @@ from pyarrow.util import find_free_port
 
 from core.models import InternalQueue, ControlElement
 from core.runnables import NetworkReceiver, NetworkSender
-from core.util import gen_uuid, set_one_of
+from core.util import set_one_of, gen_id
 from proto.edu.uci.ics.amber.engine.architecture.worker import ControlCommandV2
 from proto.edu.uci.ics.amber.engine.common import ControlPayloadV2, ControlInvocationV2, ActorVirtualIdentity
 
 
 class WorkerProxy:
-    def __init__(self):
-        self.id = gen_uuid("Worker")
+    def __init__(self, oid):
+        self.id = gen_id(oid)
         self.input_port = find_free_port()
         self.output_port = find_free_port()
         self._input_queue = InternalQueue()
