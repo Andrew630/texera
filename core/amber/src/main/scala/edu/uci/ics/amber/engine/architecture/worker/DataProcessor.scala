@@ -56,6 +56,7 @@ class DataProcessor( // dependencies:
   // TODO: add another variable for recovery index instead of using the counts below.
   private var inputTupleCount = 0L
   private var outputTupleCount = 0L
+  private var lastTime = System.nanoTime()
   private var currentInputTuple: Either[ITuple, InputExhausted] = _
   private var currentInputLink: LinkIdentity = _
   private var currentOutputIterator: Iterator[ITuple] = _
@@ -66,7 +67,11 @@ class DataProcessor( // dependencies:
   /** provide API for actor to get stats of this operator
     * @return (input tuple count, output tuple count)
     */
-  def collectStatistics(): (Long, Long) = (inputTupleCount, outputTupleCount)
+  def collectStatistics(): (Long, Long, Long) = {
+    val timeSpent = System.nanoTime() - lastTime
+    lastTime = System.nanoTime()
+    (inputTupleCount, outputTupleCount, timeSpent)
+  }
 
   /** provide API for actor to get current input tuple of this operator
     * @return current input tuple if it exists

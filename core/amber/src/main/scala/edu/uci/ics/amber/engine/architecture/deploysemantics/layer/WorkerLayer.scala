@@ -21,12 +21,12 @@ import edu.uci.ics.texera.workflow.operators.udf.pythonV2.PythonUDFOpExecV2
 import scala.collection.mutable
 
 class WorkerLayer(
-                   val id: LayerIdentity,
-                   var initIOperatorExecutor: Int => IOperatorExecutor,
-                   var numWorkers: Int,
-                   val deploymentFilter: DeploymentFilter,
-                   val deployStrategy: DeployStrategy
-                 ) extends Serializable {
+    val id: LayerIdentity,
+    var initIOperatorExecutor: Int => IOperatorExecutor,
+    var numWorkers: Int,
+    val deploymentFilter: DeploymentFilter,
+    val deployStrategy: DeployStrategy
+) extends Serializable {
 
   private val startDependencies = mutable.HashSet[LinkIdentity]()
   var workers: Map[ActorVirtualIdentity, WorkerInfo] = _
@@ -52,13 +52,13 @@ class WorkerLayer(
   def statistics: Array[WorkerStatistics] = workers.values.map(_.stats).toArray
 
   def build(
-             prev: Array[(OpExecConfig, WorkerLayer)],
-             all: Array[Address],
-             parentNetworkCommunicationActorRef: ActorRef,
-             context: ActorContext,
-             workerToLayer: mutable.HashMap[ActorVirtualIdentity, WorkerLayer],
-             workerToOperatorExec: mutable.HashMap[ActorVirtualIdentity, IOperatorExecutor]
-           ): Unit = {
+      prev: Array[(OpExecConfig, WorkerLayer)],
+      all: Array[Address],
+      parentNetworkCommunicationActorRef: ActorRef,
+      context: ActorContext,
+      workerToLayer: mutable.HashMap[ActorVirtualIdentity, WorkerLayer],
+      workerToOperatorExec: mutable.HashMap[ActorVirtualIdentity, IOperatorExecutor]
+  ): Unit = {
     deployStrategy.initialize(deploymentFilter.filter(prev, all, context.self.path.address))
     workers = (0 until numWorkers).map { i =>
       val operatorExecutor: IOperatorExecutor = initIOperatorExecutor(i)
@@ -85,7 +85,7 @@ class WorkerLayer(
       workerId -> WorkerInfo(
         workerId,
         UNINITIALIZED,
-        WorkerStatistics(UNINITIALIZED, 0, 0)
+        WorkerStatistics(UNINITIALIZED, 0, 0, 0)
       )
     }.toMap
   }

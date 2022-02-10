@@ -36,7 +36,7 @@ object ControllerConfig {
     ControllerConfig(
       monitoringIntervalMs = Option(3000),
       skewDetectionIntervalMs = Option(3000),
-      statusUpdateIntervalMs = Option(500)
+      statusUpdateIntervalMs = Option(3000)
     )
 }
 

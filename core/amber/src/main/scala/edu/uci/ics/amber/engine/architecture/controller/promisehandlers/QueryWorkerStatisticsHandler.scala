@@ -45,9 +45,8 @@ trait QueryWorkerStatisticsHandler {
           val ss = now.get(Calendar.SECOND)
 
           println(
-            s"\t THROUGHPUT for ${worker.toString()} at ${hh}:${mm}:${ss}: Input ${(newInputCount - oldInputCount) / ((System
-              .nanoTime() - workerStatisticsTime(worker)) / 1e9d)}, Output ${(newOutputCount - oldOutputCount) / ((System
-              .nanoTime() - workerStatisticsTime(worker)) / 1e9d)}"
+            s"\t THROUGHPUT for ${worker.toString()} at ${hh}:${mm}:${ss}: Input ${(newInputCount - oldInputCount) / (res.timeSpentNanoSec / 1e9d)}," +
+              s" Output ${(newOutputCount - oldOutputCount) / ((res.timeSpentNanoSec) / 1e9d)}"
           )
         }
         workflow.getOperator(worker).getWorker(worker).state = res.workerState
