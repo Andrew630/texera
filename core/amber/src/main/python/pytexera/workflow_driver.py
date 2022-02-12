@@ -21,7 +21,9 @@ class WorkflowDriver:
     def interact(self):
         while True:
             line = input(">")
-            commands = tuple(line.split())
+            commands = tuple(line.strip().split())
+            if not commands:
+                continue
             if commands[0] == "quit":
                 return
             elif commands[0] not in self.controller.available_user_commands:

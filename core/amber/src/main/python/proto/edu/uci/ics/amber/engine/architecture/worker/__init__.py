@@ -109,6 +109,11 @@ class DebugCommandV2(betterproto.Message):
 
 
 @dataclass(eq=False, repr=False)
+class PauseAll(betterproto.Message):
+    pass
+
+
+@dataclass(eq=False, repr=False)
 class ControlCommandV2(betterproto.Message):
     start_worker: "StartWorkerV2" = betterproto.message_field(1, group="sealed_value")
     pause_worker: "PauseWorkerV2" = betterproto.message_field(2, group="sealed_value")
@@ -149,6 +154,7 @@ class ControlCommandV2(betterproto.Message):
         betterproto.message_field(101, group="sealed_value")
     )
     echo: "EchoV2" = betterproto.message_field(901, group="sealed_value")
+    pause_all: "PauseAll" = betterproto.message_field(1001, group="sealed_value")
 
 
 @dataclass(eq=False, repr=False)

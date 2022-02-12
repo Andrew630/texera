@@ -73,6 +73,10 @@ message DebugCommandV2 {
     string cmd = 1;
 }
 
+message PauseAll{
+
+}
+
 message ControlCommandV2 {
     oneof sealed_value {
         StartWorkerV2 start_worker = 1;
@@ -100,6 +104,8 @@ message ControlCommandV2 {
         WorkerExecutionCompletedV2 worker_execution_completed = 101;
 
         EchoV2 echo = 901;
+
+        PauseAll pause_all = 1001;
     }
 
 }

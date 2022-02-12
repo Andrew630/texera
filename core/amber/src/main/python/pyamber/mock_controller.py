@@ -22,7 +22,7 @@ class Controller(threading.Thread):
     def __init__(self, workflow, input_queue: Queue):
         super().__init__()
         self.available_user_commands = {'pause': PauseWorkerV2(), 'resume': ResumeWorkerV2(),
-                                        'stats': QueryStatisticsV2(), 'breakpoint': DebugCommandV2()}
+                                        'stats': QueryStatisticsV2(), 'debug': DebugCommandV2()}
         self._workflow = workflow
         self._input_queue = input_queue
         self._worker_status = {}
@@ -99,7 +99,7 @@ class Controller(threading.Thread):
         for oid, operator in self._workflow.operators.items():
             worker_proxy = WorkerProxy(oid)
             self._worker_proxies[oid] = worker_proxy
-            time.sleep(0.5)
+            time.sleep(1)
             is_source = operator.is_source
             code = """
 from pytexera import *
@@ -136,5 +136,5 @@ from typing import Union, Optional, Iterator
             ("pause",), self.broadcast,
             ("resume",), self.broadcast,
             ("stats",), self.broadcast,
-            ("breakpoint", TAIL), lambda _: self.broadcast(DebugCommandV2(' '.join(msg)), [msg[1]])
+            ("debug", TAIL), lambda _: self.broadcast(DebugCommandV2(' '.join(msg[2:])), [msg[1]])
         )

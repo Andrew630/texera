@@ -19,8 +19,9 @@ class WorkerProxy:
         self.output_port = find_free_port()
         self._input_queue = InternalQueue()
         self._output_queue = InternalQueue()
+
         self.process = subprocess.Popen(
-            ["python", "../texera_run_python_worker.py", str(self.input_port), str(self.output_port), "INFO"])
+            ["python", "../texera_run_python_worker.py", str(self.input_port), str(self.output_port), "INFO" if self.id =="op-2-0" else "ERROR"])
         connected = False
         while not connected:
             try:

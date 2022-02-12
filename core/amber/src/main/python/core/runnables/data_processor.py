@@ -1,4 +1,6 @@
+import socket
 import threading
+import time
 import traceback
 import typing
 from queue import Queue
@@ -7,12 +9,14 @@ from typing import Iterator, List, MutableMapping, Optional, Union
 from loguru import logger
 from overrides import overrides
 from pampy import match
+from pyarrow.util import find_free_port
 
 from core.architecture.managers.context import Context
 from core.architecture.packaging.batch_to_tuple_converter import EndOfAllMarker
 from core.architecture.rpc.async_rpc_client import AsyncRPCClient
 from core.architecture.rpc.async_rpc_server import AsyncRPCServer
 from core.models import ControlElement, DataElement, InputExhausted, InternalQueue, Operator, SenderChangeMarker, Tuple
+from core.models.tdb import TDB
 from core.runnables.data_processor_real import DataProcessorReal
 from core.util import IQueue, StoppableQueueBlockingRunnable, get_one_of, set_one_of
 from core.util.print_writer.print_log_handler import PrintLogHandler
@@ -63,10 +67,23 @@ class DataProcessor(StoppableQueueBlockingRunnable):
         )
         self._data_input_queue = Queue()
         self._data_output_queue = Queue()
+        self._set_breakpoint_event = threading.Event()
+        self._hit_breakpoint_event = threading.Event()
+        self._set_breakpoint_event.clear()
+        self._hit_breakpoint_event.clear()
         self._dp_process_condition = threading.Condition()
-        self.data_processor_real = DataProcessorReal(self._data_input_queue, self._data_output_queue, self._operator,
-                                                     self._dp_process_condition)
+        self._tdb_port = find_free_port()
+        self.data_processor_real = DataProcessorReal(self._input_queue, self._data_input_queue, self._data_output_queue,
+                                                     self._operator,
+                                                     self._dp_process_condition, self._set_breakpoint_event,
+                                                     self._hit_breakpoint_event, self._tdb_port)
         threading.Thread(target=self.data_processor_real.run, daemon=True).start()
+        self.clientSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        # self.clientSocket.connect((TDB.DEFAULT_ADDR, self._tdb_port))
+        # self.clientSocket.recv(1024)
+        # self.clientSocket.send(b"c\n")
+        # self.
+        # logger.info(self.clientSocket.recv(1024))
 
     def complete(self) -> None:
         """
@@ -170,25 +187,25 @@ class DataProcessor(StoppableQueueBlockingRunnable):
             self._input_link_map[link] = index
         input_ = self._input_link_map[link]
         self._data_input_queue.put((tuple_, input_))
+        self.check_and_process_control()
         self.data_processor_real._finished_current.clear()
-        with self._dp_process_condition:
-            self._dp_process_condition.notify()
-            self._dp_process_condition.wait()
-        # print("cp being notified, try to collect outputs")
+        self.switch_executor()
+        self.check_pdb()
+        self.check_and_process_control()
         outputs = []
-        while not  self.data_processor_real._finished_current.is_set():
-
+        while not self.data_processor_real._finished_current.is_set():
             num_outputs = self._data_output_queue.qsize()
             # print("out", num_outputs)
             # print("in", self._data_input_queue.qsize())
-
             if num_outputs:
                 for _ in range(num_outputs):
                     yield self._data_output_queue.get()
 
-            with self._dp_process_condition:
-                self._dp_process_condition.notify()
-                self._dp_process_condition.wait()
+            self.switch_executor()
+            self.check_pdb()
+            self.check_and_process_control()
+
+
 
     def report_exception(self) -> None:
         """
@@ -294,3 +311,22 @@ class DataProcessor(StoppableQueueBlockingRunnable):
                 self.context.pause_manager.resume()
                 self.context.input_queue.enable_sub()
             self.context.state_manager.transit_to(WorkerState.RUNNING)
+
+    def check_pdb(self):
+        logger.info(f"checking pdb {self._hit_breakpoint_event.is_set()}")
+        if self._hit_breakpoint_event.is_set():
+            time.sleep(1)
+            logger.info("trying to check the hit bp")
+            self.clientSocket.recv(1024).decode('utf-8')
+            self.clientSocket.send((f"b\n").encode('utf-8'))
+            logger.info(self.clientSocket.recv(1024).decode('utf-8'))
+            # self.clientSocket.send((f"c\n").encode('utf-8'))
+
+            self._hit_breakpoint_event.clear()
+
+    def switch_executor(self):
+        if not self._hit_breakpoint_event.is_set():
+            with self._dp_process_condition:
+                self._dp_process_condition.notify()
+                self._dp_process_condition.wait()
+                logger.info("back from DP")
