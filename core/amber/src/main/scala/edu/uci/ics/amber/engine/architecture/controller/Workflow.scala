@@ -247,7 +247,7 @@ class Workflow(
     } else if (receiverOpExecConfig.isInstanceOf[SinkOpExecConfig]) {
       new AllToOne(sender, receiver, Constants.defaultBatchSize)
     } else if (sender.numWorkers == receiver.numWorkers) {
-      new FullRoundRobin(sender, receiver, Constants.defaultBatchSize)
+      new OneToOne(sender, receiver, Constants.defaultBatchSize)
     } else {
       new FullRoundRobin(sender, receiver, Constants.defaultBatchSize)
     }
