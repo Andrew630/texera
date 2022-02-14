@@ -99,11 +99,8 @@ class WorkflowCompiler(val workflowInfo: WorkflowInfo, val context: WorkflowCont
         case sink: ProgressiveSinkOpDesc =>
           sink.getCachedUpstreamId match {
             case Some(upstreamId) =>
-              sink.setStorage(
-                opResultStorage.create(upstreamId, outputSchema)
-              )
-            case None => val dbCollectionPrefix = if(context.executionID == null) "" else context.executionID + "-"
-              sink.setStorage(opResultStorage.create(dbCollectionPrefix + o.operatorID, outputSchema))
+              sink.setStorage(opResultStorage.create(upstreamId, outputSchema))
+            case None => sink.setStorage(opResultStorage.create(o.operatorID, outputSchema))
           }
         case _ =>
       }
