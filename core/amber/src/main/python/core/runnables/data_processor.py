@@ -18,10 +18,10 @@ from core.architecture.rpc.async_rpc_server import AsyncRPCServer
 from core.models import ControlElement, DataElement, InputExhausted, InternalQueue, Operator, SenderChangeMarker, Tuple
 from core.models.tdb import TDB
 from core.runnables.data_processor_real import DataProcessorReal
-from core.util import IQueue, StoppableQueueBlockingRunnable, get_one_of, set_one_of
+from core.util import IQueue, StoppableQueueBlockingRunnable, get_one_of, set_one_of, DoubleBlockingQueue
 from core.util.print_writer.print_log_handler import PrintLogHandler
 from proto.edu.uci.ics.amber.engine.architecture.worker import ControlCommandV2, LocalOperatorExceptionV2, \
-    PythonPrintV2, WorkerExecutionCompletedV2, WorkerState
+    PythonPrintV2, WorkerExecutionCompletedV2, WorkerState, DebugPromptV2
 from proto.edu.uci.ics.amber.engine.common import ActorVirtualIdentity, ControlInvocationV2, ControlPayloadV2, \
     LinkIdentity, ReturnInvocationV2
 
@@ -65,7 +65,7 @@ class DataProcessor(StoppableQueueBlockingRunnable):
             level='PRINT',
             filter="operators"
         )
-        self._data_input_queue = Queue()
+        self._data_input_queue = DoubleBlockingQueue(tuple)
         self._data_output_queue = Queue()
         self._set_breakpoint_event = threading.Event()
         self._hit_breakpoint_event = threading.Event()
@@ -73,17 +73,11 @@ class DataProcessor(StoppableQueueBlockingRunnable):
         self._hit_breakpoint_event.clear()
         self._dp_process_condition = threading.Condition()
         self._tdb_port = find_free_port()
-        self.data_processor_real = DataProcessorReal(self._input_queue, self._data_input_queue, self._data_output_queue,
+        self.data_processor_real = DataProcessorReal(self._data_input_queue,
+                                                     self._data_output_queue,
                                                      self._operator,
-                                                     self._dp_process_condition, self._set_breakpoint_event,
-                                                     self._hit_breakpoint_event, self._tdb_port)
+                                                     self._dp_process_condition)
         threading.Thread(target=self.data_processor_real.run, daemon=True).start()
-        self.clientSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        # self.clientSocket.connect((TDB.DEFAULT_ADDR, self._tdb_port))
-        # self.clientSocket.recv(1024)
-        # self.clientSocket.send(b"c\n")
-        # self.
-        # logger.info(self.clientSocket.recv(1024))
 
     def complete(self) -> None:
         """
@@ -107,7 +101,7 @@ class DataProcessor(StoppableQueueBlockingRunnable):
         method's invocation could appear in any stage while processing a DataElement.
         """
 
-        while not self._input_queue.main_empty() or self.context.pause_manager.is_paused():
+        while not self._input_queue.main_empty() or self.context.pause_manager.is_paused() or not self.data_processor_real.notifiable.is_set():
             next_entry = self.interruptible_get()
             self._process_control_element(next_entry)
 
@@ -189,23 +183,19 @@ class DataProcessor(StoppableQueueBlockingRunnable):
         self._data_input_queue.put((tuple_, input_))
         self.check_and_process_control()
         self.data_processor_real._finished_current.clear()
-        self.switch_executor()
+        self.switch_executor(196)
         self.check_pdb()
         self.check_and_process_control()
-        outputs = []
         while not self.data_processor_real._finished_current.is_set():
             num_outputs = self._data_output_queue.qsize()
-            # print("out", num_outputs)
-            # print("in", self._data_input_queue.qsize())
             if num_outputs:
                 for _ in range(num_outputs):
                     yield self._data_output_queue.get()
 
-            self.switch_executor()
+            self.switch_executor(208)
             self.check_pdb()
             self.check_and_process_control()
-
-
+        logger.info("this tuple is done")
 
     def report_exception(self) -> None:
         """
@@ -313,20 +303,24 @@ class DataProcessor(StoppableQueueBlockingRunnable):
             self.context.state_manager.transit_to(WorkerState.RUNNING)
 
     def check_pdb(self):
-        logger.info(f"checking pdb {self._hit_breakpoint_event.is_set()}")
-        if self._hit_breakpoint_event.is_set():
-            time.sleep(1)
-            logger.info("trying to check the hit bp")
-            self.clientSocket.recv(1024).decode('utf-8')
-            self.clientSocket.send((f"b\n").encode('utf-8'))
-            logger.info(self.clientSocket.recv(1024).decode('utf-8'))
-            # self.clientSocket.send((f"c\n").encode('utf-8'))
 
-            self._hit_breakpoint_event.clear()
+        if not self.data_processor_real.notifiable.is_set():
+            logger.error("in debug mode")
+            self._input_queue.disable_sub()
+            control_command = set_one_of(
+                ControlCommandV2,
+                DebugPromptV2(self.data_processor_real.debug_output_queue.get()))
+            self._async_rpc_client.send(ActorVirtualIdentity(name="CONTROLLER"), control_command)
 
-    def switch_executor(self):
-        if not self._hit_breakpoint_event.is_set():
+        else:
+            # logger.error("in normal mode")
+            self._input_queue.enable_sub()
+        # logger.error("done check pdb")
+
+    def switch_executor(self, lineno):
+        if self.data_processor_real.notifiable.is_set():
             with self._dp_process_condition:
                 self._dp_process_condition.notify()
+                logger.info(f"{lineno} - notifying DP")
                 self._dp_process_condition.wait()
-                logger.info("back from DP")
+                logger.info(f"{lineno} - back from DP")

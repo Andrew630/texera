@@ -109,6 +109,11 @@ class DebugCommandV2(betterproto.Message):
 
 
 @dataclass(eq=False, repr=False)
+class DebugPromptV2(betterproto.Message):
+    msg: str = betterproto.string_field(1)
+
+
+@dataclass(eq=False, repr=False)
 class PauseAll(betterproto.Message):
     pass
 
@@ -150,6 +155,7 @@ class ControlCommandV2(betterproto.Message):
     debug_command: "DebugCommandV2" = betterproto.message_field(
         41, group="sealed_value"
     )
+    debug_prompt: "DebugPromptV2" = betterproto.message_field(42, group="sealed_value")
     worker_execution_completed: "WorkerExecutionCompletedV2" = (
         betterproto.message_field(101, group="sealed_value")
     )

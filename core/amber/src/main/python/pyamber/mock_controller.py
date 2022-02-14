@@ -71,6 +71,8 @@ class Controller(threading.Thread):
                     proxy.process.kill()
                     logger.debug(f"killed {proxy.id}")
                 self._running = False
+        elif isinstance(command, DebugPromptV2):
+            print(command.msg)
 
     def broadcast(self, cmd, targets=None):
         if isinstance(cmd, tuple):

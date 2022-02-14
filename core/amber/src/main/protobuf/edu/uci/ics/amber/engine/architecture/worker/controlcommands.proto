@@ -73,6 +73,10 @@ message DebugCommandV2 {
     string cmd = 1;
 }
 
+message DebugPromptV2 {
+    string msg = 1;
+}
+
 message PauseAll{
 
 }
@@ -100,6 +104,7 @@ message ControlCommandV2 {
         EvaluateExpressionV2 evaluate_expression = 25;
 
         DebugCommandV2 debug_command = 41;
+        DebugPromptV2 debug_prompt = 42;
 
         WorkerExecutionCompletedV2 worker_execution_completed = 101;
 

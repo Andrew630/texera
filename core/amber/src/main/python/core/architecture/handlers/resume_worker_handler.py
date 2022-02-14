@@ -13,9 +13,11 @@ class ResumeWorkerHandler(Handler):
 
         try:
             logger.info("resume debugger")
-            context.dp.clientSocket.send((f"unt\n").encode('utf-8'))
+            context.dp.data_processor_real.debug_input_queue.put("c\n")
+            context.dp.data_processor_real.notifiable.set()
         except:
             logger.info("no debugger connected")
         context.dp._resume()
         state = context.state_manager.get_current_state()
+        logger.info("done handling resume")
         return state
