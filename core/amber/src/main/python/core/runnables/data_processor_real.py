@@ -17,7 +17,8 @@ class DataProcessorReal(StoppableQueueBlockingRunnable):
                  input_queue: DoubleBlockingQueue,
                  output_queue: Queue,
                  operator,
-                 dp_condition):
+                 dp_condition,
+                 async_rpc_client):
         super().__init__(self.__class__.__name__, input_queue)
         self._input_queue = input_queue
         self._output_queue = output_queue
@@ -27,9 +28,8 @@ class DataProcessorReal(StoppableQueueBlockingRunnable):
         self._running = Event()
         self.notifiable = Event()
         self.notifiable.set()
-        queue_in, queue_out = QueueIn(), QueueOut()
+        queue_in, queue_out = QueueIn(), QueueOut(async_rpc_client)
         self.debug_input_queue = queue_in.queue
-        self.debug_output_queue = queue_out.queue
         self._tdb = TDB(queue_in, queue_out, self.notifiable, self._dp_condition)
 
 
@@ -42,12 +42,14 @@ class DataProcessorReal(StoppableQueueBlockingRunnable):
                     1. a ControlElement;
                     2. a DataElement.
         """
+
         match(
             next_entry,
             (Tuple, int), self._process_tuple,
             (InputExhausted, int), self._process_tuple,
             str, self._process_breakpoint
         )
+        self.switch_executor(52)
 
     def _process_tuple(self, tuple_, input_):
 
@@ -82,9 +84,10 @@ class DataProcessorReal(StoppableQueueBlockingRunnable):
             logger.info(f"{lineno} - back from CP")
 
     def _process_breakpoint(self, bp):
-        logger.info(f"processing {bp}")
+        logger.error(f"processing {bp}")
         with self._dp_condition:
             self._dp_condition.notify()
+        logger.error("getting debug input")
         self._tdb.set_trace()
 
     def pre_start(self) -> None:

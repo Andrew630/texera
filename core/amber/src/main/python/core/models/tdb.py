@@ -58,6 +58,7 @@ class TDB(Pdb):
         """r(eturn)
         Continue execution until the current function returns.
         """
+        logger.info("set notifiable to True")
         self.notifiable.set()
         return super(TDB, self).do_return(arg)
     do_r = do_return
@@ -66,7 +67,10 @@ class TDB(Pdb):
         """c(ont(inue))
         Continue execution, only stop when a breakpoint is encountered.
         """
+
+        logger.error("set notifiable to True")
         self.notifiable.set()
+        logger.error("do continue")
         return super(TDB, self).do_continue(arg)
     do_c = do_cont = do_continue
 
@@ -83,12 +87,12 @@ class TDB(Pdb):
         super(TDB, self).user_call(frame, argument_list)
 
     def user_line(self, frame: FrameType) -> None:
-        logger.info("change to not notifiable")
+        logger.error("change to not notifiable")
         self.notifiable.clear()
         with self._condition:
-            logger.info("DP is trying to notify CP")
+            logger.error("DP is trying to notify CP")
             self._condition.notify()
-        logger.info("triggered !!!!!!!!!!!!")
+        logger.error("triggered !!!!!!!!!!!!")
         super(TDB, self).user_line(frame)
 
     def user_return(self, frame, return_value):

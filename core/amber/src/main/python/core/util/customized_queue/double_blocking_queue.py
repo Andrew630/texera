@@ -2,6 +2,7 @@ import queue
 import threading
 from typing import T
 
+from loguru import logger
 from overrides import overrides
 
 from core.util.customized_queue.queue_base import IQueue
@@ -111,7 +112,6 @@ class DoubleBlockingQueue(IQueue):
         Raises an AssertionError if multiple consumers are detected.
         :return:
         """
-        return
         try:
             # new unique identifier in python 3.8.
             get_id = threading.get_native_id

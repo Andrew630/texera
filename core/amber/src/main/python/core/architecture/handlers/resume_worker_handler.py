@@ -11,12 +11,8 @@ class ResumeWorkerHandler(Handler):
 
     def __call__(self, context: Context, command: ResumeWorkerV2, *args, **kwargs):
 
-        try:
-            logger.info("resume debugger")
-            context.dp.data_processor_real.debug_input_queue.put("c\n")
-            context.dp.data_processor_real.notifiable.set()
-        except:
-            logger.info("no debugger connected")
+        # if context.dp.data_processor_real._tdb.breaks:
+
         context.dp._resume()
         state = context.state_manager.get_current_state()
         logger.info("done handling resume")

@@ -1,3 +1,5 @@
+import time
+
 from loguru import logger
 from overrides import overrides
 
@@ -43,7 +45,11 @@ class StoppableQueueBlockingRunnable(Runnable, Stoppable):
         self.pre_start()
         try:
             while True:
-                self.receive(self.interruptible_get())
+
+                logger.info(f"{self.name} is getting from double blocking queue")
+                item = self.interruptible_get()
+                logger.info(f"{self.name} got {item}")
+                self.receive(item)
         except StoppableQueueBlockingRunnable.InterruptRunnable:
             # surpassed the expected interruption
             logger.debug(f"{self.name}-interrupting")

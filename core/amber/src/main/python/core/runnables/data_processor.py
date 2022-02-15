@@ -67,16 +67,13 @@ class DataProcessor(StoppableQueueBlockingRunnable):
         )
         self._data_input_queue = DoubleBlockingQueue(tuple)
         self._data_output_queue = Queue()
-        self._set_breakpoint_event = threading.Event()
-        self._hit_breakpoint_event = threading.Event()
-        self._set_breakpoint_event.clear()
-        self._hit_breakpoint_event.clear()
         self._dp_process_condition = threading.Condition()
         self._tdb_port = find_free_port()
         self.data_processor_real = DataProcessorReal(self._data_input_queue,
                                                      self._data_output_queue,
                                                      self._operator,
-                                                     self._dp_process_condition)
+                                                     self._dp_process_condition,
+                                                     self._async_rpc_client)
         threading.Thread(target=self.data_processor_real.run, daemon=True).start()
 
     def complete(self) -> None:
@@ -102,6 +99,7 @@ class DataProcessor(StoppableQueueBlockingRunnable):
         """
 
         while not self._input_queue.main_empty() or self.context.pause_manager.is_paused() or not self.data_processor_real.notifiable.is_set():
+            self.check_pdb()
             next_entry = self.interruptible_get()
             self._process_control_element(next_entry)
 
@@ -186,6 +184,7 @@ class DataProcessor(StoppableQueueBlockingRunnable):
         self.switch_executor(196)
         self.check_pdb()
         self.check_and_process_control()
+        self.check_pdb()
         while not self.data_processor_real._finished_current.is_set():
             num_outputs = self._data_output_queue.qsize()
             if num_outputs:
@@ -195,6 +194,7 @@ class DataProcessor(StoppableQueueBlockingRunnable):
             self.switch_executor(208)
             self.check_pdb()
             self.check_and_process_control()
+            self.check_pdb()
         logger.info("this tuple is done")
 
     def report_exception(self) -> None:
@@ -287,35 +287,46 @@ class DataProcessor(StoppableQueueBlockingRunnable):
         Pause the data processing.
         """
         self._print_log_handler.flush()
+        logger.error("handling pause")
         if self.context.state_manager.confirm_state(WorkerState.RUNNING, WorkerState.READY):
+            self._input_queue.disable_sub()
+            if self.data_processor_real.notifiable.is_set():
+                logger.error("switch to debugger")
+                self._switch_to_tdb()
             self.context.pause_manager.pause()
             self.context.state_manager.transit_to(WorkerState.PAUSED)
-            self._input_queue.disable_sub()
+
 
     def _resume(self) -> None:
         """
         Resume the data processing.
         """
+        logger.error("handling resume")
         if self.context.state_manager.confirm_state(WorkerState.PAUSED):
             if self.context.pause_manager.is_paused():
+                try:
+
+                    logger.error("set notifiable to True")
+                    self.data_processor_real.notifiable.set()
+                    logger.error("resume debugger")
+                    self.data_processor_real.debug_input_queue.put("c\n")
+                except:
+                    logger.info("no debugger connected")
                 self.context.pause_manager.resume()
                 self.context.input_queue.enable_sub()
             self.context.state_manager.transit_to(WorkerState.RUNNING)
 
+    def _switch_to_tdb(self):
+        logger.error("re establishing ")
+        self._data_input_queue.put("here is a breakpoint!!!")
+        logger.error("switch to DP and back")
+        self.switch_executor(1000)
+        logger.error("clear notifiable to False")
+        self.data_processor_real.notifiable.clear()
+
     def check_pdb(self):
-
         if not self.data_processor_real.notifiable.is_set():
-            logger.error("in debug mode")
             self._input_queue.disable_sub()
-            control_command = set_one_of(
-                ControlCommandV2,
-                DebugPromptV2(self.data_processor_real.debug_output_queue.get()))
-            self._async_rpc_client.send(ActorVirtualIdentity(name="CONTROLLER"), control_command)
-
-        else:
-            # logger.error("in normal mode")
-            self._input_queue.enable_sub()
-        # logger.error("done check pdb")
 
     def switch_executor(self, lineno):
         if self.data_processor_real.notifiable.is_set():

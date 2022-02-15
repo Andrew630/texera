@@ -2,25 +2,23 @@ import inspect
 import threading
 import time
 import typing
-from queue import Queue
 
 from loguru import logger
-from pampy import match, TAIL
+from pampy import match, TAIL, _
 from pyarrow import Schema
 
 from core.models import ControlElement, DataElement
-from core.util import get_one_of, set_one_of
+from core.util import get_one_of, set_one_of, StoppableQueueBlockingRunnable, IQueue, DoubleBlockingQueue
 from core.util.arrow_utils import from_arrow_schema
-
-from pyamber.worker_proxy import WorkerProxy
 from proto.edu.uci.ics.amber.engine.architecture.sendsemantics import *
 from proto.edu.uci.ics.amber.engine.architecture.worker import *
 from proto.edu.uci.ics.amber.engine.common import *
+from pyamber.worker_proxy import WorkerProxy
 
 
-class Controller(threading.Thread):
-    def __init__(self, workflow, input_queue: Queue):
-        super().__init__()
+class Controller(StoppableQueueBlockingRunnable):
+    def __init__(self, workflow, input_queue: DoubleBlockingQueue):
+        super().__init__(self.__class__.__name__, input_queue)
         self.available_user_commands = {'pause': PauseWorkerV2(), 'resume': ResumeWorkerV2(),
                                         'stats': QueryStatisticsV2(), 'debug': DebugCommandV2()}
         self._workflow = workflow
@@ -30,13 +28,13 @@ class Controller(threading.Thread):
         self._running = True
         self.initialize()
 
-    def run(self):
-        while self._running:
-            msg = self._input_queue.get()
-            if isinstance(msg, tuple):
-                self.process_user_command(msg)
-            else:
-                self.process(msg)
+    def receive(self, next_entry: IQueue.QueueElement):
+        match(
+            next_entry,
+            tuple, self.process_user_command,
+            _, self.process
+
+        )
 
     def process(self, msg: ControlElement):
         self.process_control_payload(msg.tag, msg.payload)

@@ -41,6 +41,12 @@ class Op3(UDFOperator):
 
     def process_tuple(self, tuple_: Union[Tuple, InputExhausted], input_: int) -> Iterator[Optional[TupleLike]]:
         if isinstance(tuple_, Tuple):
+            import time
+            start = time.time_ns()/1000
+            s = 0
+            for i in range(1000):
+                s += i
+            tuple_['processing_time'] = time.time_ns()/1000 - start
             self.writer.writerow(tuple_.get_fields())
             self.out_file.flush()
             yield
@@ -49,6 +55,9 @@ class Op3(UDFOperator):
         self.out_file.close()
         import time
         print(time.time_ns())
+
+    def unused_function(self):
+        print("this is not being used")
 
 
 if __name__ == '__main__':
