@@ -1,10 +1,11 @@
 package edu.uci.ics.texera.web.service
 
 import com.typesafe.scalalogging.LazyLogging
+import edu.uci.ics.amber.engine.common.AmberUtils
 import edu.uci.ics.texera.web.SqlServer
-import edu.uci.ics.texera.web.model.jooq.generated.Tables.{WORKFLOW, WORKFLOW_VERSION}
+import edu.uci.ics.texera.web.model.jooq.generated.Tables.{WORKFLOW, WORKFLOW_EXECUTIONS, WORKFLOW_VERSION}
 import edu.uci.ics.texera.web.model.jooq.generated.tables.daos.WorkflowExecutionsDao
-import edu.uci.ics.texera.web.model.jooq.generated.tables.pojos.WorkflowExecutions
+import edu.uci.ics.texera.web.model.jooq.generated.tables.pojos.{WorkflowExecutions}
 import edu.uci.ics.texera.web.workflowruntimestate.WorkflowAggregatedState
 import org.jooq.types.UInteger
 
@@ -17,7 +18,8 @@ import scala.collection.convert.ImplicitConversions.`collection AsScalaIterable`
   */
 object ExecutionsMetadataPersistService extends LazyLogging {
   final private lazy val context = SqlServer.createDSLContext()
-
+  private final val LATEST_VERSIONS_TO_BE_COMPARED_WITH: Int =
+    AmberUtils.amberConfig.getInt("workflow-executions.latest-versions-to-be-compared")
   private val workflowExecutionsDao = new WorkflowExecutionsDao(
     context.configuration
   )
@@ -54,6 +56,19 @@ object ExecutionsMetadataPersistService extends LazyLogging {
       case WorkflowAggregatedState.UNKNOWN                         => ???
       case WorkflowAggregatedState.Unrecognized(unrecognizedValue) => ???
     }
+  }
+
+  /**
+   * This method takes in a workflowID and gets the latest executed versions
+   */
+  def getLatestExecutedVersionsOfWorkflow(wid: Int): List[UInteger] = {
+    context
+      .select(WORKFLOW_EXECUTIONS.VID)
+      .from(WORKFLOW_EXECUTIONS)
+      .where(WORKFLOW_EXECUTIONS.WID.eq(UInteger.valueOf(wid))).orderBy(WORKFLOW_EXECUTIONS.EID.desc()).limit(LATEST_VERSIONS_TO_BE_COMPARED_WITH)
+      .fetchInto(classOf[UInteger])
+      .toList
+      .reverse
   }
 
   /**

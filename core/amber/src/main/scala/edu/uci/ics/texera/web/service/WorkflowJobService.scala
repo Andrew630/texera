@@ -1,6 +1,6 @@
 package edu.uci.ics.texera.web.service
 
-import com.twitter.util.{Await, Duration}
+import com.twitter.util.{Await, Duration, Future}
 import com.typesafe.scalalogging.LazyLogging
 import edu.uci.ics.amber.engine.architecture.controller.promisehandlers.ModifyLogicHandler.ModifyLogic
 import edu.uci.ics.amber.engine.architecture.controller.promisehandlers.StartWorkflowHandler.StartWorkflow
@@ -8,18 +8,30 @@ import edu.uci.ics.amber.engine.architecture.controller.{ControllerConfig, Workf
 import edu.uci.ics.amber.engine.common.client.AmberClient
 import edu.uci.ics.amber.engine.common.virtualidentity.WorkflowIdentity
 import edu.uci.ics.texera.web.model.websocket.request.{ModifyLogicRequest, WorkflowExecuteRequest}
+import edu.uci.ics.texera.web.resource.dashboard.workflow.WorkflowVersionResource.getWorkflowByVersion
+import edu.uci.ics.texera.web.service.WorkflowJobService.computeVersionsDiff
 import edu.uci.ics.texera.web.storage.WorkflowStateStore
 import edu.uci.ics.texera.web.workflowruntimestate.WorkflowAggregatedState.{READY, RUNNING}
 import edu.uci.ics.texera.web.{SubscriptionManager, TexeraWebApplication, WebsocketInput}
 import edu.uci.ics.texera.workflow.common.WorkflowContext
 import edu.uci.ics.texera.workflow.common.workflow.WorkflowCompiler.ConstraintViolationException
 import edu.uci.ics.texera.workflow.common.workflow.WorkflowInfo.toJgraphtDAG
-import edu.uci.ics.texera.workflow.common.workflow.{
-  WorkflowCompiler,
-  WorkflowInfo,
-  WorkflowRewriter
-}
+import edu.uci.ics.texera.workflow.common.workflow.{DBWorkflowToLogicalPlan, WorkflowCompiler, WorkflowInfo, WorkflowRewriter}
+import org.jooq.types.UInteger
 
+object WorkflowJobService {
+  /**
+   * This method takes in two workflow DAGs and returns the difference between them modeled as XXXX
+   * @param previousWorkflow the previously executed workflow
+   * @param currentWorkflow the current workflow to be executed
+   * @return semantic difference between the two versions
+   * */
+  def computeVersionsDiff(previousWorkflow: WorkflowInfo, currentWorkflow: WorkflowInfo) : Unit = {
+    System.out.println("PREVIOUS " +previousWorkflow)
+    System.out.println("CURRENT " + currentWorkflow)
+  }
+
+}
 class WorkflowJobService(
     workflowContext: WorkflowContext,
     stateStore: WorkflowStateStore,
@@ -68,8 +80,26 @@ class WorkflowJobService(
     }
     resultService.attachToJob(workflowInfo, client)
     if (WorkflowService.userSystemEnabled) {
+      // get previous executed versions of the same workflow to reason if the results are going to be the same
+      val previousExecutedVersionsIDs:List[UInteger] = ExecutionsMetadataPersistService.getLatestExecutedVersionsOfWorkflow(workflowContext.wId)
       workflowContext.executionID =
         ExecutionsMetadataPersistService.insertNewExecution(workflowContext.wId)
+      Future{
+        // iterate through all the version ID until we find a version that is semantically equivalent to the current workflow
+        for (versionID <- previousExecutedVersionsIDs) {
+          val previousWorkflow = getWorkflowByVersion(UInteger.valueOf(workflowContext.wId), versionID)
+          System.out.println("WORKFLOW "+ previousWorkflow)
+          // convert workflow format from DB format to engine Logical DAG
+          val workflowCasting:DBWorkflowToLogicalPlan = new DBWorkflowToLogicalPlan (previousWorkflow.getContent)
+          workflowCasting.serialize()
+          workflowCasting.createLogicalPlan()
+          val diff = computeVersionsDiff(workflowCasting.getWorkflowLogicalPlan(), workflowInfo)
+        }
+        // model the change (datastructure)
+        // call function(DAG v1, DAG v2) to get answer they are same or not
+        // accordingly decide to store new result or just use previous result
+          // save mapping of sink and mongoCollec
+      }
     }
     stateStore.jobStateStore.updateState(jobInfo =>
       jobInfo.withState(READY).withEid(workflowContext.executionID).withError(null)

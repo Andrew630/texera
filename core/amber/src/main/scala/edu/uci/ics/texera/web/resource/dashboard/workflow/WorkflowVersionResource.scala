@@ -8,13 +8,7 @@ import edu.uci.ics.texera.web.auth.SessionUser
 import edu.uci.ics.texera.web.model.jooq.generated.Tables.{WORKFLOW, WORKFLOW_VERSION}
 import edu.uci.ics.texera.web.model.jooq.generated.tables.daos.WorkflowDao
 import edu.uci.ics.texera.web.model.jooq.generated.tables.pojos.{Workflow, WorkflowVersion}
-import edu.uci.ics.texera.web.resource.dashboard.workflow.WorkflowVersionResource.{
-  VersionEntry,
-  applyPatch,
-  context,
-  encodeVersionImportance,
-  workflowDao
-}
+import edu.uci.ics.texera.web.resource.dashboard.workflow.WorkflowVersionResource.{VersionEntry, context, encodeVersionImportance, getWorkflowByVersion}
 import io.dropwizard.auth.Auth
 import org.jooq.types.UInteger
 
@@ -140,6 +134,22 @@ object WorkflowVersionResource {
     workflow
   }
 
+  def getWorkflowByVersion(wid: UInteger, vid: UInteger): Workflow = {
+    // fetch all versions preceding this
+    val versionEntries = context
+    .select(WORKFLOW_VERSION.VID, WORKFLOW_VERSION.CREATION_TIME, WORKFLOW_VERSION.CONTENT)
+    .from(WORKFLOW_VERSION)
+    .leftJoin(WORKFLOW)
+    .on(WORKFLOW_VERSION.WID.eq(WORKFLOW.WID))
+    .where(WORKFLOW.WID.eq(wid).and(WORKFLOW_VERSION.VID.ge(vid)))
+    .fetchInto(classOf[WorkflowVersion])
+    .toList
+    // apply patch
+    val currentWorkflow = workflowDao.fetchOneByWid(wid)
+    // return particular version of the workflow
+    val res: Workflow = applyPatch(versionEntries.reverse, currentWorkflow)
+    res
+  }
   /**
     * This class is to add version importance encoding to the existing `VersionEntry` from DB
     * @param vId
@@ -218,20 +228,7 @@ class WorkflowVersionResource {
     ) {
       throw new ForbiddenException("No sufficient access privilege.")
     } else {
-      // fetch all versions preceding this
-      val versionEntries = context
-        .select(WORKFLOW_VERSION.VID, WORKFLOW_VERSION.CREATION_TIME, WORKFLOW_VERSION.CONTENT)
-        .from(WORKFLOW_VERSION)
-        .leftJoin(WORKFLOW)
-        .on(WORKFLOW_VERSION.WID.eq(WORKFLOW.WID))
-        .where(WORKFLOW.WID.eq(wid).and(WORKFLOW_VERSION.VID.ge(vid)))
-        .fetchInto(classOf[WorkflowVersion])
-        .toList
-      // apply patch
-      val currentWorkflow = workflowDao.fetchOneByWid(wid)
-      // return particular version of the workflow
-      val res: Workflow = applyPatch(versionEntries.reverse, currentWorkflow)
-      res
+      getWorkflowByVersion(wid, vid)
     }
   }
 }

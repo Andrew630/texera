@@ -80,7 +80,7 @@ class MongoDBStorage(id: String, schema: Schema) extends SinkStorageReader {
     new MongoDBSinkStorageWriter(commitBatchSize)
 
   override def clear(): Unit = {
-    database.getCollection(id).drop()
+//    database.getCollection(id).drop()
   }
 
   override def getRange(from: Int, to: Int): Iterable[Tuple] = {
