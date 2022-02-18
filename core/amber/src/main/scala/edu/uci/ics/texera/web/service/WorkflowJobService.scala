@@ -5,11 +5,12 @@ import com.typesafe.scalalogging.LazyLogging
 import edu.uci.ics.amber.engine.architecture.controller.promisehandlers.ModifyLogicHandler.ModifyLogic
 import edu.uci.ics.amber.engine.architecture.controller.promisehandlers.StartWorkflowHandler.StartWorkflow
 import edu.uci.ics.amber.engine.architecture.controller.{ControllerConfig, Workflow}
+import edu.uci.ics.amber.engine.common.AmberUtils
 import edu.uci.ics.amber.engine.common.client.AmberClient
 import edu.uci.ics.amber.engine.common.virtualidentity.WorkflowIdentity
 import edu.uci.ics.texera.web.model.websocket.request.{ModifyLogicRequest, WorkflowExecuteRequest}
 import edu.uci.ics.texera.web.resource.dashboard.workflow.WorkflowVersionResource.getWorkflowByVersion
-import edu.uci.ics.texera.web.service.WorkflowJobService.computeVersionsDiff
+import edu.uci.ics.texera.web.service.WorkflowJobService.{DELTA_SEMANTIC_REASONING_FLAG, computeVersionsDiff}
 import edu.uci.ics.texera.web.storage.WorkflowStateStore
 import edu.uci.ics.texera.web.workflowruntimestate.WorkflowAggregatedState.{READY, RUNNING}
 import edu.uci.ics.texera.web.{SubscriptionManager, TexeraWebApplication, WebsocketInput}
@@ -20,6 +21,9 @@ import edu.uci.ics.texera.workflow.common.workflow.{DBWorkflowToLogicalPlan, Wor
 import org.jooq.types.UInteger
 
 object WorkflowJobService {
+  private final val DELTA_SEMANTIC_REASONING_FLAG: Boolean =
+    AmberUtils.amberConfig.getBoolean("workflow-executions.delta-semantic-reasoning-flag")
+
   /**
    * This method takes in two workflow DAGs and returns the difference between them modeled as XXXX
    * @param previousWorkflow the previously executed workflow
@@ -84,17 +88,17 @@ class WorkflowJobService(
       val previousExecutedVersionsIDs:List[UInteger] = ExecutionsMetadataPersistService.getLatestExecutedVersionsOfWorkflow(workflowContext.wId)
       workflowContext.executionID =
         ExecutionsMetadataPersistService.insertNewExecution(workflowContext.wId)
-      Future{
+      if(DELTA_SEMANTIC_REASONING_FLAG) {
+      Future {
         // iterate through all the version ID until we find a version that is semantically equivalent to the current workflow
         for (versionID <- previousExecutedVersionsIDs) {
           val previousWorkflow = getWorkflowByVersion(UInteger.valueOf(workflowContext.wId), versionID)
-          System.out.println("WORKFLOW "+ previousWorkflow)
           // convert workflow format from DB format to engine Logical DAG
-          val workflowCasting:DBWorkflowToLogicalPlan = new DBWorkflowToLogicalPlan (previousWorkflow.getContent)
-          workflowCasting.serialize()
+          val workflowCasting: DBWorkflowToLogicalPlan = new DBWorkflowToLogicalPlan(previousWorkflow.getContent)
           workflowCasting.createLogicalPlan()
           val diff = computeVersionsDiff(workflowCasting.getWorkflowLogicalPlan(), workflowInfo)
         }
+      }
         // model the change (datastructure)
         // call function(DAG v1, DAG v2) to get answer they are same or not
         // accordingly decide to store new result or just use previous result
