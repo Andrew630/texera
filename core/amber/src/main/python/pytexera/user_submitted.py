@@ -17,8 +17,6 @@ class Op1(UDFOperator):
         while i < self.cap:
             i += 1
             yield
-            import time
-            time.sleep(5)
             from datetime import datetime
             now = datetime.now()
             yield {'time': now, 'id': i}

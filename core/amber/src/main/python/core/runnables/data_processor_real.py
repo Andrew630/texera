@@ -6,7 +6,7 @@ from overrides import overrides
 from pampy import match
 
 from core.models import Tuple, InputExhausted
-from core.models.tdb import TDB, QueueIn, QueueOut
+from core.models.tdb import Tdb, QueueIn, QueueOut
 from core.util import StoppableQueueBlockingRunnable, DoubleBlockingQueue, IQueue
 
 
@@ -28,14 +28,13 @@ class DataProcessorReal(StoppableQueueBlockingRunnable):
         self.notifiable.set()
         queue_in, queue_out = QueueIn(), QueueOut(async_rpc_client)
         self.debug_input_queue = queue_in.queue
-        def channel_A():
-            self.notifiable.set()
-        def channel_B():
+
+        def switch_channel():
             self.notifiable.clear()
             with self._dp_condition:
                 self._dp_condition.notify()
-        self._tdb = TDB(queue_in, queue_out, channel_A, channel_B)
 
+        self._tdb = Tdb(queue_in, queue_out, switch_channel)
 
     @overrides
     def receive(self, next_entry: IQueue.QueueElement) -> None:
@@ -68,15 +67,14 @@ class DataProcessorReal(StoppableQueueBlockingRunnable):
 
     def check_and_process_breakpoint(self):
         while not self._input_queue.main_empty():
-            _ = self.interruptible_get()
-            self._process_breakpoint()
+            self._process_breakpoint(self.interruptible_get())
 
     def switch_executor(self):
         with self._dp_condition:
             self._dp_condition.notify()
             self._dp_condition.wait()
 
-    def _process_breakpoint(self):
+    def _process_breakpoint(self, _):
         self._tdb.set_trace()
 
     def pre_start(self) -> None:

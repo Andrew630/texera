@@ -16,7 +16,7 @@ from core.architecture.packaging.batch_to_tuple_converter import EndOfAllMarker
 from core.architecture.rpc.async_rpc_client import AsyncRPCClient
 from core.architecture.rpc.async_rpc_server import AsyncRPCServer
 from core.models import ControlElement, DataElement, InputExhausted, InternalQueue, Operator, SenderChangeMarker, Tuple
-from core.models.tdb import TDB
+from core.models.tdb import Tdb
 from core.runnables.data_processor_real import DataProcessorReal
 from core.util import IQueue, StoppableQueueBlockingRunnable, get_one_of, set_one_of, DoubleBlockingQueue
 from core.util.print_writer.print_log_handler import PrintLogHandler
@@ -285,35 +285,26 @@ class DataProcessor(StoppableQueueBlockingRunnable):
         Pause the data processing.
         """
         self._print_log_handler.flush()
-        logger.info("handling _pause")
         if self.context.state_manager.confirm_state(WorkerState.RUNNING, WorkerState.READY):
-
             if self.data_processor_real.notifiable.is_set():
-                logger.error("switch to debugger")
-                self._switch_to_tdb()
+                self._data_input_queue.put("set breakpoint")
+                self.switch_executor()
             self.context.pause_manager.pause()
             self.context.state_manager.transit_to(WorkerState.PAUSED)
 
 
-    def _resume(self) -> None:
+    def _resume(self, mode = 'c') -> None:
         """
         Resume the data processing.
         """
         if self.context.state_manager.confirm_state(WorkerState.PAUSED):
             if self.context.pause_manager.is_paused():
                 if not self.data_processor_real.notifiable.is_set():
-                    logger.error("set notifiable to True")
+                    logger.debug(f"sending command to pdb [{mode}]")
                     self.data_processor_real.notifiable.set()
-                    logger.error("resume debugger")
-                    self.data_processor_real.debug_input_queue.put("c\n")
+                    self.data_processor_real.debug_input_queue.put(f"{mode}\n")
                 self.context.pause_manager.resume()
             self.context.state_manager.transit_to(WorkerState.RUNNING)
-
-    def _switch_to_tdb(self):
-        logger.error("re establishing ")
-        self._data_input_queue.put("here is a breakpoint!!!")
-        logger.error("switch to DP and back")
-        self.switch_executor()
 
     def check_pdb(self):
         if not self.data_processor_real.notifiable.is_set():

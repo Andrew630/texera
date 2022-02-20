@@ -35,59 +35,29 @@ class QueueOut(IO, QueueMixin):
         self._async_rpc_client.send(ActorVirtualIdentity(name="CONTROLLER"), control_command)
 
 
-class TDB(Pdb):
+class Tdb(Pdb):
+    # a list of all commands that will trigger resume. different from Pdb.commands_resuming
+    resume_commands = ['c', 'cont', 'continue', 'n', 'next', 'unt', 'until', 's', 'step', 'r', 'return']
 
-    def __init__(self, stdin: QueueIn, stdout: QueueOut, use_channel_A, use_channel_B):
+    def __init__(self, stdin: QueueIn, stdout: QueueOut, switch_channel):
         super().__init__(stdin=stdin, stdout=stdout)
-        self.use_channel_A = use_channel_A
-        self.use_channel_B = use_channel_B
-
-    def do_until(self, arg):
-        self.use_channel_A()
-        return super(TDB, self).do_until(arg)
-
-    do_unt = do_until
-
-    def do_step(self, arg):
-        self.use_channel_A()
-        return super(TDB, self).do_step(arg)
-
-    do_s = do_step
-
-    def do_next(self, arg):
-        self.use_channel_A()
-        return super(TDB, self).do_next(arg)
-
-    do_n = do_next
-
-    def do_return(self, arg):
-        self.use_channel_A()
-        return super(TDB, self).do_return(arg)
-
-    do_r = do_return
-
-    def do_continue(self, arg):
-
-        self.use_channel_A()
-        return super(TDB, self).do_continue(arg)
-
-    do_c = do_cont = do_continue
+        self.switch_channel = switch_channel
 
     def user_call(self, frame, argument_list):
-        self.use_channel_B()
-        return super(TDB, self).user_call(frame, argument_list)
+        self.switch_channel()
+        return super(Tdb, self).user_call(frame, argument_list)
 
     def user_line(self, frame: FrameType) -> None:
-        self.use_channel_B()
-        return super(TDB, self).user_line(frame)
+        self.switch_channel()
+        return super(Tdb, self).user_line(frame)
 
     def user_return(self, frame, return_value):
-        self.use_channel_B()
-        return super(TDB, self).user_return(frame, return_value)
+        self.switch_channel()
+        return super(Tdb, self).user_return(frame, return_value)
 
     def user_exception(self, frame, exc_info):
-        self.use_channel_B()
-        return super(TDB, self).user_exception(frame, exc_info)
+        self.switch_channel()
+        return super(Tdb, self).user_exception(frame, exc_info)
 
     def do_clear(self, arg):
         if not arg:

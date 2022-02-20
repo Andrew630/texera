@@ -18,7 +18,8 @@ from core.architecture.handlers.update_input_linking_handler import UpdateInputL
 from core.architecture.managers.context import Context
 from core.models.internal_queue import ControlElement, InternalQueue
 from core.util import get_one_of, set_one_of
-from proto.edu.uci.ics.amber.engine.architecture.worker import ControlCommandV2, ControlException, ControlReturnV2
+from proto.edu.uci.ics.amber.engine.architecture.worker import ControlCommandV2, ControlException, ControlReturnV2, \
+    DebugCommandV2
 from proto.edu.uci.ics.amber.engine.common import ActorVirtualIdentity, ControlInvocationV2, ControlPayloadV2, \
     ReturnInvocationV2
 
@@ -48,7 +49,11 @@ class AsyncRPCServer:
         logger.debug(f"PYTHON receives a ControlInvocation: {control_invocation}")
         try:
             handler = self.look_up(command)
-            control_return: ControlReturnV2 = set_one_of(ControlReturnV2, handler(self._context, command))
+            args = tuple()
+
+            if isinstance(command, DebugCommandV2):
+                command, *args = command.cmd.split()
+            control_return: ControlReturnV2 = set_one_of(ControlReturnV2, handler(self._context, command, *args))
 
         except Exception as exception:
             logger.exception(exception)
