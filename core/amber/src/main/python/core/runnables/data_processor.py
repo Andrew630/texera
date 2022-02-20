@@ -69,11 +69,13 @@ class DataProcessor(StoppableQueueBlockingRunnable):
         self._data_output_queue = Queue()
         self._dp_process_condition = threading.Condition()
         self._tdb_port = find_free_port()
-        self.data_processor_real = DataProcessorReal(self._data_input_queue,
-                                                     self._data_output_queue,
-                                                     self._operator,
-                                                     self._dp_process_condition,
-                                                     self._async_rpc_client)
+        self.data_processor_real = DataProcessorReal(
+            self._data_input_queue,
+            self._data_output_queue,
+            self._operator,
+            self._dp_process_condition,
+            self._async_rpc_client
+        )
         threading.Thread(target=self.data_processor_real.run, daemon=True).start()
 
     def complete(self) -> None:
@@ -97,10 +99,11 @@ class DataProcessor(StoppableQueueBlockingRunnable):
         and will be invoked many times during a DataElement's processing lifecycle. Thus, this
         method's invocation could appear in any stage while processing a DataElement.
         """
-
+        self.check_pdb()
         while not self._input_queue.main_empty() or self.context.pause_manager.is_paused():
             next_entry = self.interruptible_get()
             self._process_control_element(next_entry)
+        self.check_pdb()
 
     @overrides
     def pre_start(self) -> None:
@@ -178,23 +181,20 @@ class DataProcessor(StoppableQueueBlockingRunnable):
         input_ = self._input_link_map[link]
         self._data_input_queue.put((tuple_, input_))
         self.check_and_process_control()
-        self.check_pdb()
         self.data_processor_real._finished_current.clear()
         self.switch_executor()
-        self.check_pdb()
+
         self.check_and_process_control()
-        self.check_pdb()
         while not self.data_processor_real._finished_current.is_set():
             num_outputs = self._data_output_queue.qsize()
             if num_outputs:
+                # yield from self._data_output_queue
                 for _ in range(num_outputs):
                     yield self._data_output_queue.get()
 
             self.switch_executor()
-            self.check_pdb()
-            self.check_and_process_control()
-            self.check_pdb()
 
+            self.check_and_process_control()
 
     def report_exception(self) -> None:
         """
@@ -293,8 +293,7 @@ class DataProcessor(StoppableQueueBlockingRunnable):
             self.context.pause_manager.pause()
             self.context.state_manager.transit_to(WorkerState.PAUSED)
 
-
-    def _resume(self, mode = 'c') -> None:
+    def _resume(self, mode='c') -> None:
         """
         Resume the data processing.
         """
@@ -313,10 +312,8 @@ class DataProcessor(StoppableQueueBlockingRunnable):
         else:
             self._resume()
 
-
     def switch_executor(self):
         if self.data_processor_real.notifiable.is_set():
             with self._dp_process_condition:
                 self._dp_process_condition.notify()
                 self._dp_process_condition.wait()
-
