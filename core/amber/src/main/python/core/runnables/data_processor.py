@@ -178,6 +178,7 @@ class DataProcessor(StoppableQueueBlockingRunnable):
         input_ = self._input_link_map[link]
         self._data_input_queue.put((tuple_, input_))
         self.check_and_process_control()
+        self.check_pdb()
         self.data_processor_real._finished_current.clear()
         self.switch_executor()
         self.check_pdb()
