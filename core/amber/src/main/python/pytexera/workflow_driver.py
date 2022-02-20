@@ -14,7 +14,7 @@ class WorkflowDriver:
         self._workflow = workflow
         self.controller = None
         logger.remove()
-        logger.add(open(log_path, "w+"), level="ERROR")
+        logger.add(open(log_path, "w+"), level="INFO")
 
     def start(self):
 

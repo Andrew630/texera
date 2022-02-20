@@ -68,26 +68,28 @@ class TDB(Pdb):
         Continue execution, only stop when a breakpoint is encountered.
         """
 
+
+        rc = super(TDB, self).do_continue(arg)
         logger.error("set notifiable to True")
         self.notifiable.set()
         logger.error("do continue")
-        return super(TDB, self).do_continue(arg)
+        return rc
     do_c = do_cont = do_continue
 
 
     def user_call(self, frame, argument_list):
         """This method is called when there is the remote possibility
         that we ever need to stop in this function."""
-        logger.info("change to not notifiable")
+        logger.error("change notifiable to False")
         self.notifiable.clear()
         with self._condition:
-            logger.info("DP is trying to notify CP")
+            logger.error("DP is trying to notify CP")
             self._condition.notify()
-        logger.info("triggered !!!!!!!!!!!!")
+        logger.error("triggered !!!!!!!!!!!!")
         super(TDB, self).user_call(frame, argument_list)
 
     def user_line(self, frame: FrameType) -> None:
-        logger.error("change to not notifiable")
+        logger.error("change notifiable to False")
         self.notifiable.clear()
         with self._condition:
             logger.error("DP is trying to notify CP")
@@ -97,22 +99,23 @@ class TDB(Pdb):
 
     def user_return(self, frame, return_value):
         """This function is called when a return trap is set here."""
-        logger.info("change to not notifiable")
+        logger.error("in user return")
+        logger.error("change notifiable to False")
         self.notifiable.clear()
         with self._condition:
-            logger.info("DP is trying to notify CP")
+            logger.error("DP is trying to notify CP")
             self._condition.notify()
-        logger.info("triggered !!!!!!!!!!!!")
+        logger.error("triggered !!!!!!!!!!!!")
         super(TDB, self).user_return(frame, return_value)
 
     def user_exception(self, frame, exc_info):
         """This function is called when a return trap is set here."""
-        logger.info("change to not notifiable")
+        logger.error("change notifiable to False")
         self.notifiable.clear()
         with self._condition:
-            logger.info("DP is trying to notify CP")
+            logger.error("DP is trying to notify CP")
             self._condition.notify()
-        logger.info("triggered !!!!!!!!!!!!")
+        logger.error("triggered !!!!!!!!!!!!")
         super(TDB, self).user_exception(frame, exc_info)
 
     def do_clear(self, arg):

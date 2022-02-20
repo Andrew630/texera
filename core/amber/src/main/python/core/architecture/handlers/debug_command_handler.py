@@ -16,16 +16,17 @@ class DebugCommandHandler(Handler):
         old_notifiable = context.dp.data_processor_real.notifiable.is_set()
         if context.dp.data_processor_real.notifiable.is_set():
             context.dp._pause()
-        if tokens[0] in ['c', 'n']:
-            context.dp.data_processor_real.notifiable.set()
-            context.dp._input_queue.enable_sub()
 
-        if tokens[0] == "b" and len(tokens) > 1:
-
+        if tokens[0] == 'c':
+            old_notifiable = True
+        elif tokens[0] == "b" and len(tokens) > 1:
+            logger.error(f"sending command to pdb [b {modules[0]}:{command.cmd.split()[1]}]")
             debug_input_queue.put(f"b {modules[0]}:{command.cmd.split()[1]}\n")
         else:
+            logger.error(f"sending command to pdb [{command.cmd}]")
             debug_input_queue.put(f"{command.cmd}\n")
         if old_notifiable:
             context.dp._resume()
+
         logger.error(f"done handling {command.cmd}")
         return None

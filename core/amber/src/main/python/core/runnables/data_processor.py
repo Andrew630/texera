@@ -98,8 +98,7 @@ class DataProcessor(StoppableQueueBlockingRunnable):
         method's invocation could appear in any stage while processing a DataElement.
         """
 
-        while not self._input_queue.main_empty() or self.context.pause_manager.is_paused() or not self.data_processor_real.notifiable.is_set():
-            self.check_pdb()
+        while not self._input_queue.main_empty() or self.context.pause_manager.is_paused():
             next_entry = self.interruptible_get()
             self._process_control_element(next_entry)
 
@@ -117,6 +116,7 @@ class DataProcessor(StoppableQueueBlockingRunnable):
                     1. a ControlElement;
                     2. a DataElement.
         """
+        logger.info(f"cp got {next_entry}")
         match(
             next_entry,
             DataElement, self._process_data_element,
@@ -287,9 +287,9 @@ class DataProcessor(StoppableQueueBlockingRunnable):
         Pause the data processing.
         """
         self._print_log_handler.flush()
-        logger.error("handling pause")
+        logger.info("handling _pause")
         if self.context.state_manager.confirm_state(WorkerState.RUNNING, WorkerState.READY):
-            self._input_queue.disable_sub()
+
             if self.data_processor_real.notifiable.is_set():
                 logger.error("switch to debugger")
                 self._switch_to_tdb()
@@ -304,16 +304,12 @@ class DataProcessor(StoppableQueueBlockingRunnable):
         logger.error("handling resume")
         if self.context.state_manager.confirm_state(WorkerState.PAUSED):
             if self.context.pause_manager.is_paused():
-                try:
-
+                if not self.data_processor_real.notifiable.is_set():
                     logger.error("set notifiable to True")
                     self.data_processor_real.notifiable.set()
                     logger.error("resume debugger")
                     self.data_processor_real.debug_input_queue.put("c\n")
-                except:
-                    logger.info("no debugger connected")
                 self.context.pause_manager.resume()
-                self.context.input_queue.enable_sub()
             self.context.state_manager.transit_to(WorkerState.RUNNING)
 
     def _switch_to_tdb(self):
@@ -321,17 +317,18 @@ class DataProcessor(StoppableQueueBlockingRunnable):
         self._data_input_queue.put("here is a breakpoint!!!")
         logger.error("switch to DP and back")
         self.switch_executor(1000)
-        logger.error("clear notifiable to False")
-        self.data_processor_real.notifiable.clear()
 
     def check_pdb(self):
         if not self.data_processor_real.notifiable.is_set():
-            self._input_queue.disable_sub()
+            self._pause()
+        else:
+            self._resume()
+
 
     def switch_executor(self, lineno):
         if self.data_processor_real.notifiable.is_set():
             with self._dp_process_condition:
+                logger.error(f"{lineno} - notifying DP")
                 self._dp_process_condition.notify()
-                logger.info(f"{lineno} - notifying DP")
                 self._dp_process_condition.wait()
-                logger.info(f"{lineno} - back from DP")
+                logger.error(f"{lineno} - back from DP")

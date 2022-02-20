@@ -42,7 +42,7 @@ class DataProcessorReal(StoppableQueueBlockingRunnable):
                     1. a ControlElement;
                     2. a DataElement.
         """
-
+        logger.info(f"dp real got {next_entry}")
         match(
             next_entry,
             (Tuple, int), self._process_tuple,
@@ -77,16 +77,14 @@ class DataProcessorReal(StoppableQueueBlockingRunnable):
 
     def switch_executor(self, lineno):
         with self._dp_condition:
+            logger.error(f"{lineno} - notifying CP")
             self._dp_condition.notify()
-            logger.info(f"{lineno} - notifying CP")
             self._dp_condition.wait()
             # time.sleep(1)
-            logger.info(f"{lineno} - back from CP")
+            logger.error(f"{lineno} - back from CP")
 
     def _process_breakpoint(self, bp):
         logger.error(f"processing {bp}")
-        with self._dp_condition:
-            self._dp_condition.notify()
         logger.error("getting debug input")
         self._tdb.set_trace()
 

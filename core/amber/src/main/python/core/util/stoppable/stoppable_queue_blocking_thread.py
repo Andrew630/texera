@@ -46,9 +46,9 @@ class StoppableQueueBlockingRunnable(Runnable, Stoppable):
         try:
             while True:
 
-                logger.info(f"{self.name} is getting from double blocking queue")
+                logger.debug(f"{self.name} is getting from double blocking queue")
                 item = self.interruptible_get()
-                logger.info(f"{self.name} got {item}")
+                logger.debug(f"{self.name} got {item}")
                 self.receive(item)
         except StoppableQueueBlockingRunnable.InterruptRunnable:
             # surpassed the expected interruption

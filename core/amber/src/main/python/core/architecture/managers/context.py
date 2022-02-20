@@ -26,6 +26,6 @@ class Context:
         }, WorkerState.UNINITIALIZED)
 
         self.statistics_manager = StatisticsManager()
-        self.pause_manager = PauseManager()
+        self.pause_manager = PauseManager(dp._input_queue)
         self.tuple_to_batch_converter = TupleToBatchConverter()
         self.batch_to_tuple_converter = BatchToTupleConverter()
