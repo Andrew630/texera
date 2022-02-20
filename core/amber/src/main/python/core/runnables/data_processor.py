@@ -116,7 +116,6 @@ class DataProcessor(StoppableQueueBlockingRunnable):
                     1. a ControlElement;
                     2. a DataElement.
         """
-        logger.info(f"cp got {next_entry}")
         match(
             next_entry,
             DataElement, self._process_data_element,
@@ -129,7 +128,6 @@ class DataProcessor(StoppableQueueBlockingRunnable):
         :param tag: ActorVirtualIdentity, the sender.
         :param payload: ControlPayloadV2 to be handled.
         """
-        # logger.debug(f"processing one CONTROL: {payload} from {tag}")
         match(
             (tag, get_one_of(payload)),
             typing.Tuple[ActorVirtualIdentity, ControlInvocationV2], self._async_rpc_server.receive,
@@ -181,7 +179,7 @@ class DataProcessor(StoppableQueueBlockingRunnable):
         self._data_input_queue.put((tuple_, input_))
         self.check_and_process_control()
         self.data_processor_real._finished_current.clear()
-        self.switch_executor(196)
+        self.switch_executor()
         self.check_pdb()
         self.check_and_process_control()
         self.check_pdb()
@@ -191,11 +189,11 @@ class DataProcessor(StoppableQueueBlockingRunnable):
                 for _ in range(num_outputs):
                     yield self._data_output_queue.get()
 
-            self.switch_executor(208)
+            self.switch_executor()
             self.check_pdb()
             self.check_and_process_control()
             self.check_pdb()
-        logger.info("this tuple is done")
+
 
     def report_exception(self) -> None:
         """
@@ -301,7 +299,6 @@ class DataProcessor(StoppableQueueBlockingRunnable):
         """
         Resume the data processing.
         """
-        logger.error("handling resume")
         if self.context.state_manager.confirm_state(WorkerState.PAUSED):
             if self.context.pause_manager.is_paused():
                 if not self.data_processor_real.notifiable.is_set():
@@ -316,7 +313,7 @@ class DataProcessor(StoppableQueueBlockingRunnable):
         logger.error("re establishing ")
         self._data_input_queue.put("here is a breakpoint!!!")
         logger.error("switch to DP and back")
-        self.switch_executor(1000)
+        self.switch_executor()
 
     def check_pdb(self):
         if not self.data_processor_real.notifiable.is_set():
@@ -325,10 +322,9 @@ class DataProcessor(StoppableQueueBlockingRunnable):
             self._resume()
 
 
-    def switch_executor(self, lineno):
+    def switch_executor(self):
         if self.data_processor_real.notifiable.is_set():
             with self._dp_process_condition:
-                logger.error(f"{lineno} - notifying DP")
                 self._dp_process_condition.notify()
                 self._dp_process_condition.wait()
-                logger.error(f"{lineno} - back from DP")
+

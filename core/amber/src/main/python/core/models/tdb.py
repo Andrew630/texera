@@ -1,132 +1,96 @@
 import bdb
-import sys
 from pdb import Pdb
-from threading import Condition, Event
+from queue import Queue
 from types import FrameType
+from typing import Protocol, IO
 
-from loguru import logger
+from core.util import set_one_of
+from proto.edu.uci.ics.amber.engine.architecture.worker import ControlCommandV2, DebugPromptV2
+from proto.edu.uci.ics.amber.engine.common import ActorVirtualIdentity
 
-from core.models.adb import QueueIn, QueueOut
+
+class QueueMixin(Protocol):
+    queue: Queue
+
+
+class QueueIn(IO, QueueMixin):
+    def __init__(self, queue=Queue()):
+        self.queue = queue
+
+    def readline(self, limit=None):
+        return self.queue.get()
+
+
+class QueueOut(IO, QueueMixin):
+    def __init__(self, async_rpc_client):
+        self.buf = ""
+        self._async_rpc_client = async_rpc_client
+
+    def write(self, s):
+        self.buf += s
+
+    def flush(self):
+        s, self.buf = self.buf, ""
+        control_command = set_one_of(ControlCommandV2, DebugPromptV2(s))
+        self._async_rpc_client.send(ActorVirtualIdentity(name="CONTROLLER"), control_command)
 
 
 class TDB(Pdb):
 
-    def __init__(self,
-                 stdin: QueueIn,
-                 stdout: QueueOut,
-                 notifiable: Event,
-                 condition: Condition
-                 ):
-        self.notifiable: Event = notifiable
-        self._condition = condition
-        # Backup stdin and stdout before replacing them by the socket handle
-        self.old_stdout = sys.stdout
-        self.old_stdin = sys.stdin
+    def __init__(self, stdin: QueueIn, stdout: QueueOut, use_channel_A, use_channel_B):
         super().__init__(stdin=stdin, stdout=stdout)
+        self.use_channel_A = use_channel_A
+        self.use_channel_B = use_channel_B
+
     def do_until(self, arg):
-        """unt(il) [lineno]
-        Without argument, continue execution until the line with a
-        number greater than the current one is reached.  With a line
-        number, continue execution until a line with a number greater
-        or equal to that is reached.  In both cases, also stop when
-        the current frame returns.
-        """
-        self.notifiable.set()
+        self.use_channel_A()
         return super(TDB, self).do_until(arg)
+
     do_unt = do_until
 
     def do_step(self, arg):
-        """s(tep)
-        Execute the current line, stop at the first possible occasion
-        (either in a function that is called or in the current
-        function).
-        """
-        self.notifiable.set()
+        self.use_channel_A()
         return super(TDB, self).do_step(arg)
+
     do_s = do_step
 
     def do_next(self, arg):
-        """n(ext)
-        Continue execution until the next line in the current function
-        is reached or it returns.
-        """
-        self.notifiable.set()
+        self.use_channel_A()
         return super(TDB, self).do_next(arg)
+
     do_n = do_next
 
     def do_return(self, arg):
-        """r(eturn)
-        Continue execution until the current function returns.
-        """
-        logger.info("set notifiable to True")
-        self.notifiable.set()
+        self.use_channel_A()
         return super(TDB, self).do_return(arg)
+
     do_r = do_return
 
     def do_continue(self, arg):
-        """c(ont(inue))
-        Continue execution, only stop when a breakpoint is encountered.
-        """
 
+        self.use_channel_A()
+        return super(TDB, self).do_continue(arg)
 
-        rc = super(TDB, self).do_continue(arg)
-        logger.error("set notifiable to True")
-        self.notifiable.set()
-        logger.error("do continue")
-        return rc
     do_c = do_cont = do_continue
 
-
     def user_call(self, frame, argument_list):
-        """This method is called when there is the remote possibility
-        that we ever need to stop in this function."""
-        logger.error("change notifiable to False")
-        self.notifiable.clear()
-        with self._condition:
-            logger.error("DP is trying to notify CP")
-            self._condition.notify()
-        logger.error("triggered !!!!!!!!!!!!")
-        super(TDB, self).user_call(frame, argument_list)
+        self.use_channel_B()
+        return super(TDB, self).user_call(frame, argument_list)
 
     def user_line(self, frame: FrameType) -> None:
-        logger.error("change notifiable to False")
-        self.notifiable.clear()
-        with self._condition:
-            logger.error("DP is trying to notify CP")
-            self._condition.notify()
-        logger.error("triggered !!!!!!!!!!!!")
-        super(TDB, self).user_line(frame)
+        self.use_channel_B()
+        return super(TDB, self).user_line(frame)
 
     def user_return(self, frame, return_value):
-        """This function is called when a return trap is set here."""
-        logger.error("in user return")
-        logger.error("change notifiable to False")
-        self.notifiable.clear()
-        with self._condition:
-            logger.error("DP is trying to notify CP")
-            self._condition.notify()
-        logger.error("triggered !!!!!!!!!!!!")
-        super(TDB, self).user_return(frame, return_value)
+        self.use_channel_B()
+        return super(TDB, self).user_return(frame, return_value)
 
     def user_exception(self, frame, exc_info):
-        """This function is called when a return trap is set here."""
-        logger.error("change notifiable to False")
-        self.notifiable.clear()
-        with self._condition:
-            logger.error("DP is trying to notify CP")
-            self._condition.notify()
-        logger.error("triggered !!!!!!!!!!!!")
-        super(TDB, self).user_exception(frame, exc_info)
+        self.use_channel_B()
+        return super(TDB, self).user_exception(frame, exc_info)
 
     def do_clear(self, arg):
-        """cl(ear) filename:lineno\ncl(ear) [bpnumber [bpnumber...]]
-        With a space separated list of breakpoint numbers, clear
-        those breakpoints.  Without argument, clear all breaks;
-        With a filename:lineno argument, clear all breaks at that
-        line in that file.
-        """
         if not arg:
-
             bplist = [bp for bp in bdb.Breakpoint.bpbynumber if bp]
             self.clear_all_breaks()
             for bp in bplist:
