@@ -31,8 +31,18 @@ object WorkflowJobService {
    * @return semantic difference between the two versions
    * */
   def computeVersionsDiff(previousWorkflow: WorkflowInfo, currentWorkflow: WorkflowInfo) : Unit = {
-    System.out.println("PREVIOUS " +previousWorkflow)
-    System.out.println("CURRENT " + currentWorkflow)
+    // starting from source compare the operators until reach two operators are not equals
+    // that operator will be the starting point of the difference
+    // model the change from that operator
+    val previousDAG: previousWorkflow.WorkflowDAG = previousWorkflow.toDAG
+    val currentDAG: currentWorkflow.WorkflowDAG = currentWorkflow.toDAG
+    System.out.println("PREVIOUS " + previousDAG)
+    System.out.println("CURRENT " + currentDAG)
+    val currentSources: List[String] = currentDAG.sourceOperators
+    currentSources.foreach(source => {
+      // first compare that all sources are the same then recursively move to downstream operators
+      currentDAG.getDownstream(source)
+    })
   }
 
 }
@@ -93,13 +103,14 @@ class WorkflowJobService(
         // iterate through all the version ID until we find a version that is semantically equivalent to the current workflow
         for (versionID <- previousExecutedVersionsIDs) {
           val previousWorkflow = getWorkflowByVersion(UInteger.valueOf(workflowContext.wId), versionID)
+          // TODO pass context and executionID to set it for each operator
           // convert workflow format from DB format to engine Logical DAG
           val workflowCasting: DBWorkflowToLogicalPlan = new DBWorkflowToLogicalPlan(previousWorkflow.getContent)
           workflowCasting.createLogicalPlan()
+          // model the change (datastructure)
           val diff = computeVersionsDiff(workflowCasting.getWorkflowLogicalPlan(), workflowInfo)
         }
       }
-        // model the change (datastructure)
         // call function(DAG v1, DAG v2) to get answer they are same or not
         // accordingly decide to store new result or just use previous result
           // save mapping of sink and mongoCollec
