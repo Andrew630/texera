@@ -15,6 +15,7 @@ import edu.uci.ics.texera.web.storage.WorkflowStateStore
 import edu.uci.ics.texera.web.workflowruntimestate.WorkflowAggregatedState.{READY, RUNNING}
 import edu.uci.ics.texera.web.{SubscriptionManager, TexeraWebApplication, WebsocketInput}
 import edu.uci.ics.texera.workflow.common.WorkflowContext
+import edu.uci.ics.texera.workflow.common.operators.OperatorDescriptor
 import edu.uci.ics.texera.workflow.common.workflow.WorkflowCompiler.ConstraintViolationException
 import edu.uci.ics.texera.workflow.common.workflow.WorkflowInfo.toJgraphtDAG
 import edu.uci.ics.texera.workflow.common.workflow.{DBWorkflowToLogicalPlan, WorkflowCompiler, WorkflowInfo, WorkflowRewriter}
@@ -38,14 +39,51 @@ object WorkflowJobService {
     val currentDAG: currentWorkflow.WorkflowDAG = currentWorkflow.toDAG
     System.out.println("PREVIOUS " + previousDAG)
     System.out.println("CURRENT " + currentDAG)
+    /* to simplify things, below are assumptions will relax later:
+    1. cross check current to previous not opposite. (change and addition no removal yet)
+    2. each operator has one input only(no join or set op for now)
+    3. change is a single operation on one operator
+    can use graph algorithms to quickly check the reachability of changes to SINK
+     */
+
+    /*
+    1. starting from all the sources of current DAG
+    2. inspect one branch of DAG
+    3. on each operator compare it with the previous
+    4. if ID exists
+        YES: compare its content.
+            if content is the same
+            YES: continue to next downstream
+            NO: this is the change model it in a data structure
+        NO: then this is a change and model it as an addition
+     */
     val currentSources: List[String] = currentDAG.sourceOperators
-    currentSources.foreach(source => {
-      // first compare that all sources are the same then recursively move to downstream operators
-      currentDAG.getDownstream(source)
+    val previousSources: List[String] = previousDAG.sinkOperators
+    currentSources.foreach(currentSource => {
+      checkDAG(currentWorkflow, previousWorkflow, previousSources, currentSource)
     })
   }
 
+  def checkDAG(currentDAG: WorkflowInfo, previousDAG: WorkflowInfo, previousSources: List[String], currentSource: String): Unit = {
+    val previousSourceCheck = previousSources.find(_ == currentSource)
+    previousSourceCheck match {
+      case Some(previousSource) =>
+        if(currentDAG.toDAG.operators(currentSource).equals(previousDAG.toDAG.operators(previousSource))){
+          // for all downstream of current call function again to do the check
+          currentDAG.toDAG.getDownstream(currentSource).foreach(downstream => {
+            checkDAG(currentDAG, previousDAG, previousDAG.toDAG.getDownstream(previousSource).map(op => op.operatorID), downstream.operatorID)
+          })
+        }
+        else {
+          // get the diff between the operators
+          // then model the change in a data structure
+        }
+      case None =>
+      // model the change as an addition
+    }
+  }
 }
+
 class WorkflowJobService(
     workflowContext: WorkflowContext,
     stateStore: WorkflowStateStore,
