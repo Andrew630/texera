@@ -28,6 +28,7 @@ import { auditTime, debounceTime, filter } from "rxjs/operators";
 import { WorkflowCollabService } from "../../workflow-collab/workflow-collab.service";
 import { Command, commandFuncs, CommandMessage } from "src/app/workspace/types/command.interface";
 import { isDefined } from "../../../../common/util/predicate";
+import { History } from "../../undo-redo/History.service";
 
 type OperatorPosition = {
   position: Point;
@@ -56,6 +57,7 @@ type GroupInfo = {
 @Injectable({
   providedIn: "root",
 })
+@History.registerClass
 export class WorkflowActionService {
   private static readonly DEFAULT_WORKFLOW_NAME = "Untitled Workflow";
   private static readonly DEFAULT_WORKFLOW = {
@@ -498,6 +500,8 @@ export class WorkflowActionService {
    * @param breakpoints
    * @param commentBoxes
    */
+
+  @History.recordEvent()
   public addOperatorsAndLinks(
     operatorsAndPositions: readonly { op: OperatorPredicate; pos: Point }[],
     links?: readonly OperatorLink[],
@@ -568,7 +572,7 @@ export class WorkflowActionService {
       parameters: [operatorsAndPositions, links],
       type: "execute",
     };
-    this.executeStoreAndPropagateCommand(command, commandMessage);
+    this.executeStoreAndPropagateCommand(command);
 
     if (isDefined(commentBoxes)) {
       commentBoxes.forEach(commentBox => this.addCommentBox(commentBox));
