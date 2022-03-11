@@ -6,6 +6,7 @@ import com.fasterxml.jackson.annotation.{JsonSubTypes, JsonTypeInfo}
 @JsonSubTypes(
   Array(
     new Type(value = classOf[CommandRequest]),
+    new Type(value = classOf[HistoryRequest]),
     new Type(value = classOf[AcquireLockRequest]),
     new Type(value = classOf[TryLockRequest]),
     new Type(value = classOf[RestoreVersionRequest]),

@@ -1,3 +1,5 @@
+import { Serializable } from "src/app/common/util/serializable-tree";
+
 export interface WIdRequest
   extends Readonly<{
     wId: number;
@@ -15,6 +17,20 @@ export interface CommandEvent
     commandMessage: string;
   }> {}
 
+export interface HistoryRequest extends Readonly<{
+  payload: string;
+  }> {}
+
+export interface HistoryEvent extends Readonly<{
+  payload: string;
+  }> {}
+
+export interface HistoryMessage extends Readonly<{
+  className: string, 
+  instanceNumber: number,
+  methodName: string,
+  serializedArgs: string
+  }> {}
 export interface WorkflowAccessEvent
   extends Readonly<{
     workflowReadonly: boolean;
@@ -27,6 +43,7 @@ export type CollabWebsocketRequestTypeMap = {
   AcquireLockRequest: {};
   TryLockRequest: {};
   RestoreVersionRequest: {};
+  HistoryRequest: HistoryRequest;
 };
 
 export type CollabWebsocketEventTypeMap = {
@@ -38,6 +55,7 @@ export type CollabWebsocketEventTypeMap = {
   LockRejectedEvent: {};
   RestoreVersionEvent: {};
   WorkflowAccessEvent: WorkflowAccessEvent;
+  HistoryEvent: HistoryEvent;
 };
 
 // helper type definitions to generate the request and event types

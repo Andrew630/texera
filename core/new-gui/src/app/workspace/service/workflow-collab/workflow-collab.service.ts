@@ -12,8 +12,11 @@ import {
   CollabWebsocketEventTypeMap,
   CollabWebsocketRequestTypes,
   CollabWebsocketRequestTypeMap,
+  HistoryEvent,
+  HistoryMessage,
 } from "../../types/collab-websocket.interface";
 import { CommandMessage } from "../../types/command.interface";
+import { History } from "../undo-redo/History.service";
 
 export const WS_HEARTBEAT_INTERVAL_MS = 10000;
 export const WS_RECONNECT_INTERVAL_MS = 3000;
@@ -44,10 +47,13 @@ export class WorkflowCollabService {
   private readonly lockGrantedSubject: ReplaySubject<boolean> = new ReplaySubject(1);
   private readonly restoreVersionSubject: ReplaySubject<boolean> = new ReplaySubject(1);
   private readonly workflowAccessSubject: ReplaySubject<boolean> = new ReplaySubject(1);
+  private readonly historyMessageSubject: Subject<HistoryMessage> = new Subject<HistoryMessage>();
 
   constructor() {
     // In case collab is not enabled, lock should always be granted.
     this.setLockStatus(true);
+
+    History.bindWorkflowCollabService(this);
 
     if (this.isCollabEnabled()) {
       this.setPropagationEnabled(true);
@@ -56,6 +62,11 @@ export class WorkflowCollabService {
       this.subscribeToEvent("CommandEvent").subscribe(commandEvent => {
         const message = JSON.parse(commandEvent.commandMessage) as CommandMessage;
         this.commandMessageSubject.next(message);
+      });
+
+      this.subscribeToEvent("HistoryEvent").subscribe(historyEvent => {
+        const message = JSON.parse(historyEvent.payload) as HistoryMessage;
+        this.historyMessageSubject.next(message);
       });
 
       this.subscribeToEvent("LockGrantedEvent").subscribe(_ => {
@@ -129,6 +140,7 @@ export class WorkflowCollabService {
 
       // refresh connection status
       this.websocketEvent().subscribe(_ => (this.connected = true));
+      this.websocketEvent().subscribe(console.log);
     }
   }
 
@@ -266,6 +278,10 @@ export class WorkflowCollabService {
    */
   public getChangeStream(): Observable<CommandMessage> {
     return this.commandMessageSubject.asObservable();
+  }
+
+  public getHistStream(): Observable<HistoryMessage> {
+    return this.historyMessageSubject.asObservable();
   }
 
   /**

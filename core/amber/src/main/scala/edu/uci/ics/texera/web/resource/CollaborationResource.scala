@@ -80,6 +80,20 @@ class CollaborationResource extends LazyLogging {
             logger.debug("Message propagated to workflow " + sessionWId.toString)
           }
         }
+      case historyRequest: HistoryRequest =>
+        logger.debug("Received history message: " + historyRequest.payload)
+        for (sessionId <- sessionIdSessionMap.keySet) {
+          // only send to other sessions, not the session that sent the message
+          val session = sessionIdSessionMap(sessionId)
+          val sessionWId = sessionIdWIdMap.get(sessionId)
+          val senderWId = sessionIdWIdMap.get(senderSessId)
+          if (
+            session != senderSession && sessionWId.isDefined && senderWId.isDefined && senderWId == sessionWId
+          ) {
+            send(session, HistoryEvent(historyRequest.payload))
+            logger.debug("Message propagated to workflow " + sessionWId.toString)
+          }
+        }
       case heartbeat: HeartBeatRequest =>
         send(senderSession, HeartBeatResponse())
 
