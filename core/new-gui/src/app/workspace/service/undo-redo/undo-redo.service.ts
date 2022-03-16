@@ -2,7 +2,6 @@ import { Injectable } from "@angular/core";
 import { Observable, Subject } from "rxjs";
 import { nonNull } from "../../../common/util/assert";
 import { Command, CommandMessage } from "../../types/command.interface";
-import { WorkflowCollabService } from "./../workflow-collab/workflow-collab.service";
 
 /* TODO LIST FOR BUGS
 1. Problem with repeatedly adding and deleting a link without letting go, unintended behavior
@@ -24,10 +23,10 @@ export class UndoRedoService {
 
   private canUndoStream = new Subject<boolean>();
   private canRedoStream = new Subject<boolean>();
+  private undoRedoStream = new Subject<CommandMessage>();
+  private addCommandEnabled: boolean = true;
 
-  constructor(private workflowCollabService: WorkflowCollabService) {
-    this.listenToRemoteChange();
-  }
+  constructor() {}
 
   public enableWorkFlowModification() {
     this.workFlowModificationEnabled = true;
@@ -50,12 +49,13 @@ export class UndoRedoService {
 
       const command = nonNull(this.undoStack.pop());
       this.setListenJointCommand(false);
-      if (command.undo) command.undo();
+      if (command.undoMessage) {
+        this.undoRedoStream.next(command.undoMessage);
+      }
       this.redoStack.push(command);
       this.setListenJointCommand(true);
+      // TODO: what is the use of this?
       this.canUndoStream.next(this.canUndo());
-      const commandMessage: CommandMessage = { action: "undoredo", parameters: [], type: "undo" };
-      this.workflowCollabService.propagateChange(commandMessage);
       console.log("service can undo", this.canUndo());
     }
   }
@@ -69,16 +69,16 @@ export class UndoRedoService {
       }
       const command = nonNull(this.redoStack.pop());
       this.setListenJointCommand(false);
-      if (command.redo) {
-        command.redo();
-      } else {
-        command.execute();
+      this.setAddCommandEnabled(false);
+      if (command.redoMessage) {
+        this.undoRedoStream.next(command.redoMessage);
+      } else if (command.executeMessage){
+        this.undoRedoStream.next(command.executeMessage);
       }
       this.undoStack.push(command);
+      this.setAddCommandEnabled(true);
       this.setListenJointCommand(true);
       this.canRedoStream.next(this.canRedo());
-      const commandMessage: CommandMessage = { action: "undoredo", parameters: [], type: "redo" };
-      this.workflowCollabService.propagateChange(commandMessage);
       console.log("service can redo", this.canRedo());
     }
   }
@@ -134,20 +134,15 @@ export class UndoRedoService {
     this.redoStack = [];
   }
 
-  private listenToRemoteChange(): void {
-    this.workflowCollabService.getChangeStream().subscribe(message => {
-      const previousModificationEnabledStatus = this.workFlowModificationEnabled;
-      this.enableWorkFlowModification();
-      if (message.type === "undo") {
-        this.workflowCollabService.handleRemoteChange(() => {
-          this.undoAction();
-        });
-      } else if (message.type === "redo") {
-        this.workflowCollabService.handleRemoteChange(() => {
-          this.redoAction();
-        });
-      }
-      if (!previousModificationEnabledStatus) this.disableWorkFlowModification();
-    });
+  public getUndoRedoStream(): Observable<CommandMessage> {
+    return this.undoRedoStream.asObservable();
+  }
+
+  public isAddCommandEnabled(): boolean {
+    return this.addCommandEnabled;
+  }
+
+  public setAddCommandEnabled(enabled: boolean) {
+    this.addCommandEnabled = enabled;
   }
 }

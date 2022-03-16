@@ -67,7 +67,7 @@ class CollaborationResource extends LazyLogging {
         wIdSessionIdsMap(wId) = sessionIdSet
 
       case commandRequest: CommandRequest =>
-        logger.debug("Received command message: " + commandRequest.commandMessage)
+        logger.info("Received command message: " + commandRequest.commandMessage)
         for (sessionId <- sessionIdSessionMap.keySet) {
           // only send to other sessions, not the session that sent the message
           val session = sessionIdSessionMap(sessionId)

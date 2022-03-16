@@ -108,6 +108,7 @@ export class WorkflowActionService {
     this.handleHighlightedElementPositionChange();
     this.listenToRemoteChange();
     this.listenToLockChange();
+    this.listenToUndoRedoChange();
   }
 
   /**
@@ -158,14 +159,16 @@ export class WorkflowActionService {
         const command: Command = {
           modifiesWorkflow: true,
           execute: () => {},
+          executeMessage: {action: "addLink", parameters: [link]},
           undo: () => this.deleteLinkWithIDInternal(link.linkID),
-          redo: () => this.addLinksInternal([link]),
+          undoMessage: {action: "deleteLinkWithID", parameters: [link.linkID]}
         };
-        const commandMessage: CommandMessage = { action: "addLink", parameters: [link], type: "execute" };
+        const commandMessage: CommandMessage = { action: "addLink", parameters: [link] };
         this.executeStoreAndPropagateCommand(command, commandMessage);
       });
   }
 
+  // TODO
   public handleJointOperatorDrag(): void {
     // save first event as starting position
     // compare starting position to final position at last event
@@ -248,6 +251,7 @@ export class WorkflowActionService {
       });
   }
 
+  // TODO
   /**
    * Propagates dragging event (no execution locally). Separate from undo-redo to achieve higher FPS.
    */
@@ -286,23 +290,20 @@ export class WorkflowActionService {
         if (currentHighlightedOpIDs.includes(dragRoot)) {
           const commandMessage: CommandMessage = {
             action: "changeOperatorPosition",
-            parameters: [currentHighlightedOpIDs, offsetX, offsetY],
-            type: "execute",
-          };
+            parameters: [currentHighlightedOpIDs, offsetX, offsetY]};
           this.workflowCollabService.propagateChange(commandMessage);
         } else {
           // Assume for now if not dragging an operator then it is a comment box.
           // TODO: unify with operator position change and handle highlighting issues.
           const commandMessage: CommandMessage = {
             action: "changeCommentBoxPosition",
-            parameters: [dragRoot, offsetX, offsetY],
-            type: "execute",
-          };
+            parameters: [dragRoot, offsetX, offsetY]};
           this.workflowCollabService.propagateChange(commandMessage);
         }
       });
   }
 
+  // TODO
   /**
    * Subscribes to element position change event stream,
    *  checks if the element (operator or group) is moved by user and
@@ -406,18 +407,13 @@ export class WorkflowActionService {
         // highlight the newly added operator
         this.jointGraphWrapper.highlightOperators(operator.operatorID);
       },
+      executeMessage: {action: "addOperator", parameters: [operator, point]},
       undo: () => {
-        // remove the operator from JointJS
-        this.deleteOperatorInternal(operator.operatorID);
-        // restore previous highlights
-        this.jointGraphWrapper.unhighlightElements(this.jointGraphWrapper.getCurrentHighlights());
-        this.jointGraphWrapper.setMultiSelectMode(
-          currentHighlights.operators.length + currentHighlights.groups.length + currentHighlights.links.length > 1
-        );
-        this.jointGraphWrapper.highlightElements(currentHighlights);
+        this.deleteOperator(operator.operatorID);
       },
+      undoMessage: {action: "deleteOperator", parameters: [operator.operatorID]}
     };
-    const commandMessage: CommandMessage = { action: "addOperator", parameters: [operator, point], type: "execute" };
+    const commandMessage: CommandMessage = { action: "addOperator", parameters: [operator, point] };
     this.executeStoreAndPropagateCommand(command, commandMessage);
   }
 
@@ -449,6 +445,7 @@ export class WorkflowActionService {
           this.unGroupInternal(group.groupID);
         }
       },
+      executeMessage: {action: "deleteOperator", parameters: [operatorID]},
       undo: () => {
         this.addOperatorsInternal([{ operator, point }]);
         this.getJointGraphWrapper().setCellLayer(operatorID, layer);
@@ -468,9 +465,10 @@ export class WorkflowActionService {
           this.getJointGraphWrapper().highlightOperators(operatorID);
         }
       },
+      undoMessage: {action: "addOperator", parameters: [operator, point]}
     };
 
-    const commandMessage: CommandMessage = { action: "deleteOperator", parameters: [operatorID], type: "execute" };
+    const commandMessage: CommandMessage = { action: "deleteOperator", parameters: [operatorID] };
     this.executeStoreAndPropagateCommand(command, commandMessage);
   }
 
@@ -483,11 +481,13 @@ export class WorkflowActionService {
         this.jointGraphWrapper.setMultiSelectMode(false);
         this.addCommentBoxInternal(commentBox);
       },
+      executeMessage: {action: "addCommentBox", parameters: [commentBox]},
       undo: () => {
         this.deleteCommentBoxInternal(commentBox.commentBoxID);
       },
+      undoMessage: {action: "deleteCommentBox", parameters: [commentBox.commentBoxID]}
     };
-    const commandMessage: CommandMessage = { action: "addCommentBox", parameters: [commentBox], type: "execute" };
+    const commandMessage: CommandMessage = { action: "addCommentBox", parameters: [commentBox] };
     this.executeStoreAndPropagateCommand(command, commandMessage);
   }
 
@@ -508,7 +508,7 @@ export class WorkflowActionService {
   ): void {
     // remember currently highlighted operators and groups
     const currentHighlights = this.jointGraphWrapper.getCurrentHighlights();
-
+    // TODO
     const command: Command = {
       modifiesWorkflow: true,
       execute: () => {
@@ -566,9 +566,7 @@ export class WorkflowActionService {
 
     const commandMessage: CommandMessage = {
       action: "addOperatorsAndLinks",
-      parameters: [operatorsAndPositions, links],
-      type: "execute",
-    };
+      parameters: [operatorsAndPositions, links]};
     this.executeStoreAndPropagateCommand(command, commandMessage);
 
     if (isDefined(commentBoxes)) {
@@ -583,11 +581,13 @@ export class WorkflowActionService {
       execute: () => {
         this.deleteCommentBoxInternal(commentBoxID);
       },
+      executeMessage: {action: "deleteCommentBox", parameters: [commentBoxID]},
       undo: () => {
         this.addCommentBoxInternal(commentBox);
       },
+      undoMessage: {action: "addCommentBox", parameters: [commentBox]}
     };
-    const commandMessage: CommandMessage = { action: "deleteCommentBox", parameters: [commentBoxID], type: "execute" };
+    const commandMessage: CommandMessage = { action: "deleteCommentBox", parameters: [commentBoxID] };
     this.executeStoreAndPropagateCommand(command, commandMessage);
   }
 
@@ -652,7 +652,7 @@ export class WorkflowActionService {
 
     // remember currently highlighted operators and groups
     const currentHighlights = this.jointGraphWrapper.getCurrentHighlights();
-
+    // TODO
     const command: Command = {
       modifiesWorkflow: true,
       execute: () => {
@@ -714,9 +714,7 @@ export class WorkflowActionService {
 
     const commandMessage: CommandMessage = {
       action: "deleteOperatorsAndLinks",
-      parameters: [operatorIDs, linkIDs],
-      type: "execute",
-    };
+      parameters: [operatorIDs, linkIDs]};
     this.executeStoreAndPropagateCommand(command, commandMessage);
   }
 
@@ -734,6 +732,7 @@ export class WorkflowActionService {
       .forEach(
         op => (operatorPositions[op.operatorID] = this.getJointGraphWrapper().getElementPosition(op.operatorID))
       );
+    // TODO
     const command: Command = {
       modifiesWorkflow: true,
       execute: () => {
@@ -745,7 +744,7 @@ export class WorkflowActionService {
         });
       },
     };
-    const commandMessage: CommandMessage = { action: "autoLayoutWorkflow", parameters: [], type: "execute" };
+    const commandMessage: CommandMessage = { action: "autoLayoutWorkflow", parameters: [] };
     this.executeStoreAndPropagateCommand(command, commandMessage);
   }
 
@@ -758,9 +757,11 @@ export class WorkflowActionService {
     const command: Command = {
       modifiesWorkflow: true,
       execute: () => this.addLinksInternal([link]),
+      executeMessage: {action: "addLink", parameters: [link]},
       undo: () => this.deleteLinkWithIDInternal(link.linkID),
+      undoMessage: {action: "deleteLinkWithID", parameters: [link.linkID]},
     };
-    const commandMessage: CommandMessage = { action: "addLink", parameters: [link], type: "execute" };
+    const commandMessage: CommandMessage = { action: "addLink", parameters: [link] };
     this.executeStoreAndPropagateCommand(command, commandMessage);
   }
 
@@ -775,6 +776,7 @@ export class WorkflowActionService {
     const command: Command = {
       modifiesWorkflow: true,
       execute: () => this.deleteLinkWithIDInternal(linkID),
+      executeMessage: {action: "deleteLinkWithID", parameters: [linkID]},
       undo: () => {
         this.addLinksInternal([link]);
         const group = this.getOperatorGroup().getGroupByLink(linkID);
@@ -787,8 +789,9 @@ export class WorkflowActionService {
           this.getJointGraphWrapper().setCellLayer(linkID, layer);
         }
       },
+      undoMessage: {action: "addLink", parameters: [link]}
     };
-    const commandMessage: CommandMessage = { action: "deleteLinkWithID", parameters: [linkID], type: "execute" };
+    const commandMessage: CommandMessage = { action: "deleteLinkWithID", parameters: [linkID] };
     this.executeStoreAndPropagateCommand(command, commandMessage);
   }
 
@@ -933,26 +936,15 @@ export class WorkflowActionService {
           this.jointGraphWrapper.unhighlightGroups(...this.jointGraphWrapper.getCurrentHighlightedGroupIDs());
         }
       },
+      executeMessage: {action: "setOperatorProperty", parameters: [operatorID, newProperty]},
       undo: () => {
-        this.setOperatorPropertyInternal(operatorID, prevProperty);
-
-        // unhighlight everything but the operator being modified
-        const currentHighlightedOperators = <string[]>this.jointGraphWrapper.getCurrentHighlightedOperatorIDs().slice();
-        if ((!group || !group.collapsed) && !currentHighlightedOperators.includes(operatorID)) {
-          this.jointGraphWrapper.setMultiSelectMode(false);
-          this.jointGraphWrapper.highlightOperators(operatorID);
-        } else if (!group || !group.collapsed) {
-          currentHighlightedOperators.splice(currentHighlightedOperators.indexOf(operatorID), 1);
-          this.jointGraphWrapper.unhighlightOperators(...currentHighlightedOperators);
-          this.jointGraphWrapper.unhighlightGroups(...this.jointGraphWrapper.getCurrentHighlightedGroupIDs());
-        }
+        this.setOperatorProperty(operatorID, prevProperty);
       },
+      undoMessage: {action: "setOperatorProperty", parameters: [operatorID, prevProperty]}
     };
     const commandMessage: CommandMessage = {
       action: "setOperatorProperty",
-      parameters: [operatorID, newProperty],
-      type: "execute",
-    };
+      parameters: [operatorID, newProperty]};
     this.executeStoreAndPropagateCommand(command, commandMessage);
   }
 
@@ -993,16 +985,14 @@ export class WorkflowActionService {
       execute: () => {
         this.setLinkBreakpointInternal(linkID, newBreakpoint);
       },
+      executeMessage: {action: "setLinkBreakpoint", parameters: [linkID, newBreakpoint]},
       undo: () => {
         this.setLinkBreakpointInternal(linkID, prevBreakpoint);
       },
+      undoMessage: {action: "setLinkBreakpoint", parameters: [linkID, undefined]}
     };
 
-    const commandMessage: CommandMessage = {
-      action: "setLinkBreakpoint",
-      parameters: [linkID, newBreakpoint],
-      type: "execute",
-    };
+    const commandMessage: CommandMessage = { action: "setLinkBreakpoint", parameters: [linkID, newBreakpoint] };
     this.executeStoreAndPropagateCommand(command, commandMessage);
   }
 
@@ -1166,13 +1156,12 @@ export class WorkflowActionService {
     };
   }
 
+  // TODO
   public addComment(comment: Comment, commentBoxID: string): void {
     this.texeraGraph.addCommentToCommentBox(comment, commentBoxID);
     const commandMessage: CommandMessage = {
       action: "addComment",
-      parameters: [comment, commentBoxID],
-      type: "execute",
-    };
+      parameters: [comment, commentBoxID]};
     this.workflowCollabService.propagateChange(commandMessage);
   }
 
@@ -1196,15 +1185,21 @@ export class WorkflowActionService {
       execute: () => {
         this.getTexeraGraph().changeOperatorDisplayName(operatorId, newDisplayName);
       },
+      executeMessage: {
+        action: "setOperatorCustomName",
+        parameters: [operatorId, newDisplayName, userFriendlyName]
+      },
       undo: () => {
         this.getTexeraGraph().changeOperatorDisplayName(operatorId, previousName);
       },
+      undoMessage: {
+        action: "setOperatorCustomName",
+        parameters: [operatorId, previousName, userFriendlyName]
+      }
     };
     const commandMessage: CommandMessage = {
       action: "setOperatorCustomName",
-      parameters: [operatorId, newDisplayName, userFriendlyName],
-      type: "execute",
-    };
+      parameters: [operatorId, newDisplayName, userFriendlyName]};
     this.executeStoreAndPropagateCommand(command, commandMessage);
   }
 
@@ -1216,12 +1211,14 @@ export class WorkflowActionService {
         this.workflowMetadata.name = name.trim().length > 0 ? name : WorkflowActionService.DEFAULT_WORKFLOW_NAME;
         this.workflowMetadataChangeSubject.next();
       },
+      executeMessage: {action: "setWorkflowName", parameters: [name]},
       undo: () => {
         this.workflowMetadata.name = previousName;
         this.workflowMetadataChangeSubject.next();
       },
+      undoMessage: {action: "setWorkflowName", parameters: [previousName]}
     };
-    const commandMessage: CommandMessage = { action: "setWorkflowName", parameters: [name], type: "execute" };
+    const commandMessage: CommandMessage = { action: "setWorkflowName", parameters: [name] };
     this.executeStoreAndPropagateCommand(command, commandMessage);
   }
 
@@ -1231,9 +1228,7 @@ export class WorkflowActionService {
     this.undoRedoService.clearRedoStack();
     const commandMessage: CommandMessage = {
       action: "resetAsNewWorkflow",
-      parameters: [],
-      type: "execute",
-    };
+      parameters: []};
     this.workflowCollabService.propagateChange(commandMessage);
   }
 
@@ -1247,9 +1242,7 @@ export class WorkflowActionService {
     };
     const commandMessage: CommandMessage = {
       action: "highlightOperators",
-      parameters: [multiSelect, ...ops],
-      type: "execute",
-    };
+      parameters: [multiSelect, ...ops]};
     this.executeStoreAndPropagateCommand(command, commandMessage);
   }
 
@@ -1258,7 +1251,7 @@ export class WorkflowActionService {
       modifiesWorkflow: false,
       execute: () => this.getJointGraphWrapper().unhighlightOperators(...ops),
     };
-    const commandMessage: CommandMessage = { action: "unhighlightOperators", parameters: [...ops], type: "execute" };
+    const commandMessage: CommandMessage = { action: "unhighlightOperators", parameters: [...ops] };
     this.executeStoreAndPropagateCommand(command, commandMessage);
   }
 
@@ -1272,9 +1265,7 @@ export class WorkflowActionService {
     };
     const commandMessage: CommandMessage = {
       action: "highlightLinks",
-      parameters: [multiSelect, ...links],
-      type: "execute",
-    };
+      parameters: [multiSelect, ...links]};
     this.executeStoreAndPropagateCommand(command, commandMessage);
   }
 
@@ -1283,7 +1274,7 @@ export class WorkflowActionService {
       modifiesWorkflow: false,
       execute: () => this.getJointGraphWrapper().unhighlightLinks(...links),
     };
-    const commandMessage: CommandMessage = { action: "unhighlightLinks", parameters: [...links], type: "execute" };
+    const commandMessage: CommandMessage = { action: "unhighlightLinks", parameters: [...links] };
     this.executeStoreAndPropagateCommand(command, commandMessage);
   }
 
@@ -1294,12 +1285,14 @@ export class WorkflowActionService {
         ops.forEach(op => {
           this.getTexeraGraph().disableOperator(op);
         }),
+      executeMessage: {action: "disableOperators", parameters: [ops]},
       undo: () =>
         ops.forEach(op => {
           this.getTexeraGraph().enableOperator(op);
         }),
+      undoMessage: {action: "enableOperators", parameters: [ops]}
     };
-    const commandMessage: CommandMessage = { action: "disableOperators", parameters: [ops], type: "execute" };
+    const commandMessage: CommandMessage = { action: "disableOperators", parameters: [ops] };
     this.executeStoreAndPropagateCommand(command, commandMessage);
   }
 
@@ -1310,12 +1303,14 @@ export class WorkflowActionService {
         ops.forEach(op => {
           this.getTexeraGraph().enableOperator(op);
         }),
+      executeMessage: {action: "enableOperators", parameters: [ops]},
       undo: () =>
         ops.forEach(op => {
           this.getTexeraGraph().disableOperator(op);
         }),
+      undoMessage: {action: "disableOperators", parameters: [ops]}
     };
-    const commandMessage: CommandMessage = { action: "enableOperators", parameters: [ops], type: "execute" };
+    const commandMessage: CommandMessage = { action: "enableOperators", parameters: [ops] };
     this.executeStoreAndPropagateCommand(command, commandMessage);
   }
 
@@ -1326,12 +1321,14 @@ export class WorkflowActionService {
         ops.forEach(op => {
           this.getTexeraGraph().cacheOperator(op);
         }),
+      executeMessage: {action: "cacheOperators", parameters: [ops]},
       undo: () =>
         ops.forEach(op => {
           this.getTexeraGraph().unCacheOperator(op);
         }),
+      undoMessage: {action: "unCacheOperators", parameters: [ops]}
     };
-    const commandMessage: CommandMessage = { action: "cacheOperators", parameters: [ops], type: "execute" };
+    const commandMessage: CommandMessage = { action: "cacheOperators", parameters: [ops] };
     this.executeStoreAndPropagateCommand(command, commandMessage);
   }
 
@@ -1342,12 +1339,14 @@ export class WorkflowActionService {
         ops.forEach(op => {
           this.getTexeraGraph().unCacheOperator(op);
         }),
+      executeMessage: {action: "unCacheOperators", parameters: [ops]},
       undo: () =>
         ops.forEach(op => {
           this.getTexeraGraph().cacheOperator(op);
         }),
+      undoMessage: {action: "cacheOperators", parameters: [ops]}
     };
-    const commandMessage: CommandMessage = { action: "unCacheOperators", parameters: [ops], type: "execute" };
+    const commandMessage: CommandMessage = { action: "unCacheOperators", parameters: [ops] };
     this.executeStoreAndPropagateCommand(command, commandMessage);
   }
 
@@ -1576,7 +1575,7 @@ export class WorkflowActionService {
 
     this.undoRedoService.setListenJointCommand(false);
     command.execute();
-    if (command.undo) this.undoRedoService.addCommand(command);
+    if (command.undoMessage && this.undoRedoService.isAddCommandEnabled()) this.undoRedoService.addCommand(command);
     this.undoRedoService.setListenJointCommand(true);
 
     if (message) this.workflowCollabService.propagateChange(message);
@@ -1593,15 +1592,25 @@ export class WorkflowActionService {
 
   private listenToRemoteChange(): void {
     this.workflowCollabService.getChangeStream().subscribe(message => {
-      if (message.type === "execute") {
-        this.workflowCollabService.handleRemoteChange(() => {
-          const func: commandFuncs = message.action;
-          const previousModificationEnabledStatus = this.workflowModificationEnabled;
-          this.enableWorkflowModification();
-          (this[func] as any).apply(this, message.parameters);
-          if (!previousModificationEnabledStatus) this.disableWorkflowModification();
-        });
-      }
+      this.workflowCollabService.handleRemoteChange(() => {
+      this.applyCommandMessage(message);
+      });
+    });
+  }
+
+  public applyCommandMessage(message: CommandMessage): void {
+    const func: commandFuncs = message.action;
+    const previousModificationEnabledStatus = this.workflowModificationEnabled;
+    this.enableWorkflowModification();
+    (this[func] as any).apply(this, message.parameters);
+    if (!previousModificationEnabledStatus) this.disableWorkflowModification();
+  }
+
+  private listenToUndoRedoChange(): void {
+    this.undoRedoService.getUndoRedoStream().subscribe(message => {
+      this.undoRedoService.setAddCommandEnabled(false);
+      this.applyCommandMessage(message);
+      this.undoRedoService.setAddCommandEnabled(true);
     });
   }
 
