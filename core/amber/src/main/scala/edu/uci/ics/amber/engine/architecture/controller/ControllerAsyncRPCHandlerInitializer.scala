@@ -30,7 +30,7 @@ import edu.uci.ics.amber.engine.architecture.worker.promisehandlers.QueryLoadMet
 import edu.uci.ics.amber.engine.common.{Constants, WorkflowLogger}
 import edu.uci.ics.amber.engine.common.rpc.AsyncRPCClient.ControlInvocation
 import edu.uci.ics.amber.engine.common.rpc.{AsyncRPCClient, AsyncRPCHandlerInitializer, AsyncRPCServer}
-import edu.uci.ics.amber.engine.common.virtualidentity.ActorVirtualIdentity
+import edu.uci.ics.amber.engine.common.virtualidentity.{ActorVirtualIdentity, LayerIdentity, OperatorIdentity}
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -89,13 +89,13 @@ class ControllerAsyncRPCHandlerInitializer(
     }
   }
 
-  var detectSkewHandle: Cancellable = _
+  var detectSkewHandle: mutable.HashMap[OperatorIdentity, Cancellable] = new mutable.HashMap[OperatorIdentity, Cancellable]()
   var detectSortSkewHandle: Cancellable = _
 
   // related to join-skew research
   def enableDetectSkewCalls(joinLayer: WorkerLayer, probeLayer: WorkerLayer): Unit = {
-    if (detectSkewHandle == null) {
-      detectSkewHandle = actorContext.system.scheduler.schedule(
+    if (!detectSkewHandle.contains(joinLayer.id.toOperatorIdentity)) {
+      detectSkewHandle(joinLayer.id.toOperatorIdentity) = actorContext.system.scheduler.schedule(
         Constants.startDetection,
         Constants.detectionPeriod,
         actorContext.self,
@@ -119,10 +119,10 @@ class ControllerAsyncRPCHandlerInitializer(
     }
   }
 
-  def disableDetectSkewCalls(): Unit = {
-    if (detectSkewHandle != null) {
-      detectSkewHandle.cancel()
-      detectSkewHandle = null
+  def disableDetectSkewCalls(opId: OperatorIdentity): Unit = {
+    if (detectSkewHandle.contains(opId)) {
+      detectSkewHandle(opId).cancel()
+      detectSkewHandle.remove(opId)
     }
   }
 
