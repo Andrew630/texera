@@ -84,7 +84,7 @@ trait WorkerExecutionCompletedHandler {
           // && workflow.getOperator(sender).getState == OperatorState.Completed
         ) {
           // join-skew research related
-          disableDetectSkewCalls(workflow.getOperator(sender))
+          disableDetectSkewCalls(workflow.getOperator(sender).id)
         } else if (
           workflow
             .getOperator(sender)
