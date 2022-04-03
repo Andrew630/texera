@@ -40,7 +40,7 @@ import edu.uci.ics.amber.engine.common.{AmberUtils, Constants, WorkflowLogger}
 import edu.uci.ics.amber.engine.common.rpc.AsyncRPCServer.{CommandCompleted, ControlCommand}
 import edu.uci.ics.amber.engine.common.statetransition.WorkerStateManager
 import edu.uci.ics.amber.engine.common.virtualidentity.ActorVirtualIdentity.WorkerActorVirtualIdentity
-import edu.uci.ics.amber.engine.common.virtualidentity.{ActorVirtualIdentity, LinkIdentity}
+import edu.uci.ics.amber.engine.common.virtualidentity.{ActorVirtualIdentity, LinkIdentity, OperatorIdentity}
 
 import scala.collection.immutable.ListMap
 import scala.collection.mutable
@@ -48,10 +48,10 @@ import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 import scala.util.control.Breaks.{break, breakable}
 
 object DetectSkewHandler {
-  var previousCallFinished = true
-  var convertToFirstPhaseCallFinished = true
-  var convertToSecondPhaseCallFinished = true
-  var stopMitigationCallFinished = true
+  var previousCallFinished: mutable.HashMap[OperatorIdentity, Boolean] = new mutable.HashMap[OperatorIdentity, Boolean]()
+  var convertToFirstPhaseCallFinished: mutable.HashMap[OperatorIdentity, Boolean] = new mutable.HashMap[OperatorIdentity, Boolean]()
+  var convertToSecondPhaseCallFinished: mutable.HashMap[OperatorIdentity, Boolean] = new mutable.HashMap[OperatorIdentity, Boolean]()
+  var stopMitigationCallFinished: mutable.HashMap[OperatorIdentity, Boolean] = new mutable.HashMap[OperatorIdentity, Boolean]()
   var startTimeForMetricColl: Long = _
   var endTimeForMetricColl: Long = _
   var startTimeForBuildRepl: Long = _
@@ -95,6 +95,7 @@ object DetectSkewHandler {
 
   /**
     * worker is eligible for first phase if no mitigation has happened till now or it is in second phase right now.
+    *
     * @param worker
     * @return
     */
@@ -110,6 +111,7 @@ object DetectSkewHandler {
 
   /**
     * worker is eligible for free if it is being used in neither of the phases.
+    *
     * @param worker
     * @return
     */
@@ -157,11 +159,15 @@ object DetectSkewHandler {
       if (!freeWorkersAlreadyRolledBack.contains(sortedWorkers(i)) && (freeWorkersInFirstPhase.contains(sortedWorkers(i)) || freeWorkersInSecondPhase.contains(sortedWorkers(i)))) {
         var actualSkewedWorker: ActorVirtualIdentity = null
         skewedToFreeWorkerFirstPhase.keys.foreach(sw => {
-          if (skewedToFreeWorkerFirstPhase(sw) == sortedWorkers(i)) { actualSkewedWorker = sw }
+          if (skewedToFreeWorkerFirstPhase(sw) == sortedWorkers(i)) {
+            actualSkewedWorker = sw
+          }
         })
         if (actualSkewedWorker == null) {
           skewedToFreeWorkerSecondPhase.keys.foreach(sw => {
-            if (skewedToFreeWorkerSecondPhase(sw) == sortedWorkers(i)) { actualSkewedWorker = sw }
+            if (skewedToFreeWorkerSecondPhase(sw) == sortedWorkers(i)) {
+              actualSkewedWorker = sw
+            }
           })
         }
         assert(actualSkewedWorker != null)
@@ -282,6 +288,7 @@ trait DetectSkewHandler {
 
   /**
     * Sends a control to a layer of workers and returns the list of results as future
+    *
     * @param workerLayer
     * @param message
     * @tparam T
@@ -301,6 +308,7 @@ trait DetectSkewHandler {
   /**
     * Sends `ShareFlow` control message to each worker in `workerLayer`. The message says that flow has to be shared
     * between skewed and free workers in `skewedAndFreeWorkersList`.
+    *
     * @param workerLayer
     * @param skewedAndFreeWorkersList
     * @tparam T
@@ -368,9 +376,9 @@ trait DetectSkewHandler {
             skewedLoad = 1
             freeLoad = 0
           }
-//          detectSkewLogger.logInfo(
-//            s"SECOND PHASE: ${id} - Loads=${skewedLoad}:${freeLoad}; Error=${skewedEstimateError}:${freeEstimateError}; Size=${skewedHistorySize}:${freeHistorySize} - Ratio=${redirectNum}:${skewedLoad.toLong}"
-//          )
+          //          detectSkewLogger.logInfo(
+          //            s"SECOND PHASE: ${id} - Loads=${skewedLoad}:${freeLoad}; Error=${skewedEstimateError}:${freeEstimateError}; Size=${skewedHistorySize}:${freeHistorySize} - Ratio=${redirectNum}:${skewedLoad.toLong}"
+          //          )
           futuresArr.append(
             send(ShareFlow(sf._1, sf._2, redirectNum, skewedLoad.toLong), id)
             // send(ShareFlow(sf._1, sf._2, 1, 2), id)
@@ -379,13 +387,13 @@ trait DetectSkewHandler {
         }
       })
     })
-//    if (Constants.dynamicThreshold) {
-//      println(s"The MAX ERROR at Second phase is ${maxErrorAtSecondPhaseStart}")
-//      if (maxError > Constants.upperErrorLimit && maxError != Double.MaxValue) {
-//        Constants.threshold = Constants.threshold + Constants.fixedThresholdIncrease
-//        detectSkewLogger.logInfo(s"The threshold is now set to ${Constants.threshold}")
-//      }
-//    }
+    //    if (Constants.dynamicThreshold) {
+    //      println(s"The MAX ERROR at Second phase is ${maxErrorAtSecondPhaseStart}")
+    //      if (maxError > Constants.upperErrorLimit && maxError != Double.MaxValue) {
+    //        Constants.threshold = Constants.threshold + Constants.fixedThresholdIncrease
+    //        detectSkewLogger.logInfo(s"The threshold is now set to ${Constants.threshold}")
+    //      }
+    //    }
     Future.collect(futuresArr)
   }
 
@@ -409,9 +417,9 @@ trait DetectSkewHandler {
     val loads = new mutable.HashMap[ActorVirtualIdentity, Long]()
     for ((id, currLoad) <- cmd.joinLayer.workers.keys zip metrics._1) {
       loads(id) = currLoad.stashedBatches + currLoad.unprocessedQueueLength
-//      detectSkewLogger.logInfo(
-//        s"\tLOAD ${id} - ${currLoad.stashedBatches} stashed batches, ${currLoad.unprocessedQueueLength} internal queue, ${currLoad.totalPutInInternalQueue} total input"
-//      )
+      //      detectSkewLogger.logInfo(
+      //        s"\tLOAD ${id} - ${currLoad.stashedBatches} stashed batches, ${currLoad.unprocessedQueueLength} internal queue, ${currLoad.totalPutInInternalQueue} total input"
+      //      )
     }
     metrics._2.foreach(replyFromNetComm => {
       for ((wId, futLoad) <- replyFromNetComm._1.dataToSend) {
@@ -449,16 +457,16 @@ trait DetectSkewHandler {
           )
         }
 
-//        if (wid.toString().contains("main)[0]")) {
-//          print(s"\tLOADS FROM ${prevWId} are : ")
-//          var stop = existingHistoryForWid.size - 11
-//          if (stop < 0) { stop = 0 }
-//          for (i <- existingHistoryForWid.size - 1 to stop by -1) {
-//            print(existingHistoryForWid(i) + ", ")
-//          }
-//          print(s"Standard error is ${sampleMeanError(existingHistoryForWid)} with size ${existingHistoryForWid.size}")
-//          println()
-//        }
+        //        if (wid.toString().contains("main)[0]")) {
+        //          print(s"\tLOADS FROM ${prevWId} are : ")
+        //          var stop = existingHistoryForWid.size - 11
+        //          if (stop < 0) { stop = 0 }
+        //          for (i <- existingHistoryForWid.size - 1 to stop by -1) {
+        //            print(existingHistoryForWid(i) + ", ")
+        //          }
+        //          print(s"Standard error is ${sampleMeanError(existingHistoryForWid)} with size ${existingHistoryForWid.size}")
+        //          println()
+        //        }
         prevWorkerMap(wid) = existingHistoryForWid
       }
       workerToTotalLoadHistory(prevWId) = prevWorkerMap
@@ -469,6 +477,7 @@ trait DetectSkewHandler {
 
   /**
     * Prints the total # of tuples sent to workers in the skewed operator till now.
+    *
     * @param totalSentPerSender
     */
   private def aggregateAndPrintSentCount(
@@ -485,11 +494,17 @@ trait DetectSkewHandler {
 
   registerHandler { (cmd: DetectSkew, sender) =>
     {
+      if (!previousCallFinished.contains(cmd.joinLayer.id.toOperatorIdentity)) {
+        previousCallFinished(cmd.joinLayer.id.toOperatorIdentity) = true
+        convertToFirstPhaseCallFinished(cmd.joinLayer.id.toOperatorIdentity) = true
+        convertToSecondPhaseCallFinished(cmd.joinLayer.id.toOperatorIdentity) = true
+        stopMitigationCallFinished(cmd.joinLayer.id.toOperatorIdentity) = true
+      }
       if (
-        previousCallFinished && convertToFirstPhaseCallFinished &&
-        convertToSecondPhaseCallFinished && stopMitigationCallFinished
+        previousCallFinished(cmd.joinLayer.id.toOperatorIdentity) && convertToFirstPhaseCallFinished(cmd.joinLayer.id.toOperatorIdentity) &&
+        convertToSecondPhaseCallFinished(cmd.joinLayer.id.toOperatorIdentity) && stopMitigationCallFinished(cmd.joinLayer.id.toOperatorIdentity)
       ) {
-        previousCallFinished = false
+        previousCallFinished(cmd.joinLayer.id.toOperatorIdentity) = false
         println(s"\n\nNEW ITERATION ${iterationCount}")
         iterationCount += 1
         startTimeForMetricColl = System.nanoTime()
@@ -510,7 +525,7 @@ trait DetectSkewHandler {
             val skewedAndFreeWorkersForFirstPhase =
               getSkewedAndFreeWorkersEligibleForFirstPhase(loads)
             if (skewedAndFreeWorkersForFirstPhase.size > 0) {
-              convertToFirstPhaseCallFinished = false
+              convertToFirstPhaseCallFinished(cmd.joinLayer.id.toOperatorIdentity) = false
               startTimeForBuildRepl = System.nanoTime()
 
               val futuresArr = new ArrayBuffer[Future[Seq[Unit]]]()
@@ -518,7 +533,9 @@ trait DetectSkewHandler {
                 detectSkewLogger.logInfo(
                   s"\tSkewed Worker:${sf._1}, Free Worker:${sf._2}, build replication:${sf._3}"
                 )
-                if (sf._3) { futuresArr.append(send(SendBuildTable(sf._2), sf._1)) }
+                if (sf._3) {
+                  futuresArr.append(send(SendBuildTable(sf._2), sf._1))
+                }
               })
               Future
                 .collect(futuresArr)
@@ -538,7 +555,7 @@ trait DetectSkewHandler {
                     detectSkewLogger.logInfo(
                       s"\tTHE NETWORK SHARE HAS HAPPENED in ${(endTimeForNetChange - startTimeForNetChange) / 1e9d}s"
                     )
-                    convertToFirstPhaseCallFinished = true
+                    convertToFirstPhaseCallFinished(cmd.joinLayer.id.toOperatorIdentity) = true
                   })
                 })
             }
@@ -549,7 +566,7 @@ trait DetectSkewHandler {
             val skewedAndFreeWorkersForSecondPhase =
               getSkewedAndFreeWorkersEligibleForSecondPhase(loads)
             if (skewedAndFreeWorkersForSecondPhase.size > 0) {
-              convertToSecondPhaseCallFinished = false
+              convertToSecondPhaseCallFinished(cmd.joinLayer.id.toOperatorIdentity) = false
               skewedAndFreeWorkersForSecondPhase.foreach(sf =>
                 detectSkewLogger.logInfo(
                   s"\tSkewed Worker:${sf._1}, Free Worker:${sf._2} moving to second phase"
@@ -564,14 +581,14 @@ trait DetectSkewHandler {
                 detectSkewLogger.logInfo(
                   s"\tTHE SECOND PHASE NETWORK SHARE HAS HAPPENED in ${(endTimeForNetChangeForSecondPhase - startTimeForNetChangeForSecondPhase) / 1e9d}s"
                 )
-                convertToSecondPhaseCallFinished = true
+                convertToSecondPhaseCallFinished(cmd.joinLayer.id.toOperatorIdentity) = true
               })
             }
 
             // stop mitigation for worker pairs where mitigation is causing free worker to become skewed
             val actualSkewedAndFreeGettingSkewedWorkers = isfreeGettingSkewed(loads)
             if (actualSkewedAndFreeGettingSkewedWorkers.size > 0) {
-              stopMitigationCallFinished = false
+              stopMitigationCallFinished(cmd.joinLayer.id.toOperatorIdentity) = false
               actualSkewedAndFreeGettingSkewedWorkers.foreach(sf =>
                 detectSkewLogger.logInfo(
                   s"\tFree Worker Getting skewed:${sf._2}, Actual skewed Worker:${sf._1}"
@@ -588,14 +605,20 @@ trait DetectSkewHandler {
                 detectSkewLogger.logInfo(
                   s"\tTHE NETWORK ROLLBACK HAS HAPPENED in ${(endTimeForNetChange - startTimeForNetChange) / 1e9d}s"
                 )
-                stopMitigationCallFinished = true
+                stopMitigationCallFinished(cmd.joinLayer.id.toOperatorIdentity) = true
               })
             }
 
-            previousCallFinished = true
-            Future { CommandCompleted() }
+            previousCallFinished(cmd.joinLayer.id.toOperatorIdentity) = true
+            Future {
+              CommandCompleted()
+            }
           })
-      } else { Future { CommandCompleted() } }
+      } else {
+        Future {
+          CommandCompleted()
+        }
+      }
     }
   }
 

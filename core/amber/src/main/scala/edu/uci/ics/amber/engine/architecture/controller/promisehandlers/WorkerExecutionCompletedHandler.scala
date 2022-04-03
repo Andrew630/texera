@@ -77,10 +77,10 @@ trait WorkerExecutionCompletedHandler {
         }
       future.flatMap { ret =>
         if (
-          workflow
-            .getOperator(sender)
-            .isInstanceOf[HashJoinTweetsOpExecConfig[Constants.joinType]] || workflow.getOperator(sender).isInstanceOf[HashJoinSpecial2OpExecConfig[Constants.joinType]]
-          || workflow.getOperator(sender).isInstanceOf[HashJoinGeneratedOpExecConfig[Constants.joinType]]
+          workflow.getOperator(sender).isInstanceOf[HashJoinOpExecConfig[Constants.joinType]] ||
+          workflow.getOperator(sender).isInstanceOf[HashJoinTweetsOpExecConfig[Constants.joinType]] ||
+          workflow.getOperator(sender).isInstanceOf[HashJoinSpecial2OpExecConfig[Constants.joinType]] ||
+          workflow.getOperator(sender).isInstanceOf[HashJoinGeneratedOpExecConfig[Constants.joinType]]
           // && workflow.getOperator(sender).getState == OperatorState.Completed
         ) {
           // join-skew research related
