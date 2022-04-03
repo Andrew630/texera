@@ -20,6 +20,8 @@ import edu.uci.ics.amber.engine.architecture.controller.promisehandlers.DetectSk
   previousCallFinished,
   skewedToFreeWorkerFirstPhase,
   skewedToFreeWorkerHistory,
+  skewedToFreeWorkerNetworkRolledBack,
+  skewedToFreeWorkerSecondPhase,
   startTimeForBuildRepl,
   startTimeForMetricColl,
   startTimeForNetChange,
@@ -52,44 +54,47 @@ object DetectSkewHandler {
   var convertToFirstPhaseCallFinished: mutable.HashMap[OperatorIdentity, Boolean] = new mutable.HashMap[OperatorIdentity, Boolean]()
   var convertToSecondPhaseCallFinished: mutable.HashMap[OperatorIdentity, Boolean] = new mutable.HashMap[OperatorIdentity, Boolean]()
   var stopMitigationCallFinished: mutable.HashMap[OperatorIdentity, Boolean] = new mutable.HashMap[OperatorIdentity, Boolean]()
-  var startTimeForMetricColl: Long = _
-  var endTimeForMetricColl: Long = _
-  var startTimeForBuildRepl: Long = _
-  var endTimeForBuildRepl: Long = _
-  var startTimeForNetChange: Long = _
-  var endTimeForNetChange: Long = _
-  var startTimeForNetChangeForSecondPhase: Long = _
-  var endTimeForNetChangeForSecondPhase: Long = _
-  var startTimeForNetRollback: Long = _
-  var endTimeForNetRollback: Long = _
+  var startTimeForMetricColl: mutable.HashMap[OperatorIdentity, Long] = new mutable.HashMap[OperatorIdentity, Long]()
+  var endTimeForMetricColl: mutable.HashMap[OperatorIdentity, Long] = new mutable.HashMap[OperatorIdentity, Long]()
+  var startTimeForBuildRepl: mutable.HashMap[OperatorIdentity, Long] = new mutable.HashMap[OperatorIdentity, Long]()
+  var endTimeForBuildRepl: mutable.HashMap[OperatorIdentity, Long] = new mutable.HashMap[OperatorIdentity, Long]()
+  var startTimeForNetChange: mutable.HashMap[OperatorIdentity, Long] = new mutable.HashMap[OperatorIdentity, Long]()
+  var endTimeForNetChange: mutable.HashMap[OperatorIdentity, Long] = new mutable.HashMap[OperatorIdentity, Long]()
+  var startTimeForNetChangeForSecondPhase: mutable.HashMap[OperatorIdentity, Long] = new mutable.HashMap[OperatorIdentity, Long]()
+  var endTimeForNetChangeForSecondPhase: mutable.HashMap[OperatorIdentity, Long] = new mutable.HashMap[OperatorIdentity, Long]()
+  var startTimeForNetRollback: mutable.HashMap[OperatorIdentity, Long] = new mutable.HashMap[OperatorIdentity, Long]()
+  var endTimeForNetRollback: mutable.HashMap[OperatorIdentity, Long] = new mutable.HashMap[OperatorIdentity, Long]()
   var detectSkewLogger: WorkflowLogger = new WorkflowLogger("DetectSkewHandler")
-  var iterationCount: Int = 1
+  var iterationCount: mutable.HashMap[OperatorIdentity, Int] = new mutable.HashMap[OperatorIdentity, Int]()
   var firstPhaseIterations = new mutable.HashMap[ActorVirtualIdentity, Int]()
   var maxError: Double = Double.MinValue
 
-  var skewedToFreeWorkerFirstPhase = new mutable.HashMap[ActorVirtualIdentity, ActorVirtualIdentity]()
-  var skewedToFreeWorkerSecondPhase = new mutable.HashMap[ActorVirtualIdentity, ActorVirtualIdentity]()
-  var skewedToFreeWorkerNetworkRolledBack = new mutable.HashMap[ActorVirtualIdentity, ActorVirtualIdentity]()
-  var skewedToFreeWorkerHistory = new mutable.HashMap[ActorVirtualIdentity, ActorVirtualIdentity]()
+  var skewedToFreeWorkerFirstPhase: mutable.HashMap[OperatorIdentity, mutable.HashMap[ActorVirtualIdentity, ActorVirtualIdentity]] =
+    new mutable.HashMap[OperatorIdentity, mutable.HashMap[ActorVirtualIdentity, ActorVirtualIdentity]]()
+  var skewedToFreeWorkerSecondPhase: mutable.HashMap[OperatorIdentity, mutable.HashMap[ActorVirtualIdentity, ActorVirtualIdentity]] =
+    new mutable.HashMap[OperatorIdentity, mutable.HashMap[ActorVirtualIdentity, ActorVirtualIdentity]]()
+  var skewedToFreeWorkerNetworkRolledBack: mutable.HashMap[OperatorIdentity, mutable.HashMap[ActorVirtualIdentity, ActorVirtualIdentity]] =
+    new mutable.HashMap[OperatorIdentity, mutable.HashMap[ActorVirtualIdentity, ActorVirtualIdentity]]()
+  var skewedToFreeWorkerHistory: mutable.HashMap[OperatorIdentity, mutable.HashMap[ActorVirtualIdentity, ActorVirtualIdentity]] =
+    new mutable.HashMap[OperatorIdentity, mutable.HashMap[ActorVirtualIdentity, ActorVirtualIdentity]]()
   // worker to worker current input size
-  var workerToLoadHistory = new mutable.HashMap[ActorVirtualIdentity, ListBuffer[Long]]()
+  var workerToLoadHistory: mutable.HashMap[OperatorIdentity, mutable.HashMap[ActorVirtualIdentity, ListBuffer[Long]]] =
+    new mutable.HashMap[OperatorIdentity, mutable.HashMap[ActorVirtualIdentity, ListBuffer[Long]]]()
   // (prevWorker, (worker, array of load per 1000 tuples for worker as in prevWorker))
-  var workerToTotalLoadHistory =
-    new mutable.HashMap[ActorVirtualIdentity, mutable.HashMap[ActorVirtualIdentity, ArrayBuffer[
-      Long
-    ]]]()
+  var workerToTotalLoadHistory: mutable.HashMap[OperatorIdentity, mutable.HashMap[ActorVirtualIdentity, mutable.HashMap[ActorVirtualIdentity, ArrayBuffer[Long]]]] =
+    new mutable.HashMap[OperatorIdentity, mutable.HashMap[ActorVirtualIdentity, mutable.HashMap[ActorVirtualIdentity, ArrayBuffer[Long]]]]()
   val historyLimit = 1
 
   final case class DetectSkew(joinLayer: WorkerLayer, probeLayer: WorkerLayer) extends ControlCommand[CommandCompleted]
 
-  def updateLoadHistory(loads: mutable.HashMap[ActorVirtualIdentity, Long]): Unit = {
+  def updateLoadHistory(loads: mutable.HashMap[ActorVirtualIdentity, Long], skewedOpId: OperatorIdentity): Unit = {
     loads.keys.foreach(worker => {
-      val history = workerToLoadHistory.getOrElse(worker, new ListBuffer[Long]())
+      val history = workerToLoadHistory.getOrElse(skewedOpId, new mutable.HashMap[ActorVirtualIdentity, ListBuffer[Long]]()).getOrElse(worker, new ListBuffer[Long]())
       if (history.size == historyLimit) {
         history.remove(0)
       }
       history.append(loads(worker))
-      workerToLoadHistory(worker) = history
+      workerToLoadHistory(skewedOpId)(worker) = history
     })
   }
 
@@ -99,14 +104,14 @@ object DetectSkewHandler {
     * @param worker
     * @return
     */
-  def isEligibleForSkewedAndForFirstPhase(worker: ActorVirtualIdentity): Boolean = {
-    !skewedToFreeWorkerFirstPhase.keySet.contains(
+  def isEligibleForSkewedAndForFirstPhase(worker: ActorVirtualIdentity, skewedOpId: OperatorIdentity): Boolean = {
+    !skewedToFreeWorkerFirstPhase(skewedOpId).keySet.contains(
       worker
-    ) && !skewedToFreeWorkerFirstPhase.values.toList.contains(
+    ) && !skewedToFreeWorkerFirstPhase(skewedOpId).values.toList.contains(
       worker
-    ) && !skewedToFreeWorkerNetworkRolledBack.values.toList.contains(worker) && !skewedToFreeWorkerSecondPhase.values.toList.contains(
+    ) && !skewedToFreeWorkerNetworkRolledBack(skewedOpId).values.toList.contains(worker) && !skewedToFreeWorkerSecondPhase(skewedOpId).values.toList.contains(
       worker
-    ) && (!Constants.singleIterationOnly || !skewedToFreeWorkerSecondPhase.keySet.contains(worker))
+    ) && (!Constants.singleIterationOnly || !skewedToFreeWorkerSecondPhase(skewedOpId).keySet.contains(worker))
   }
 
   /**
@@ -115,16 +120,16 @@ object DetectSkewHandler {
     * @param worker
     * @return
     */
-  def isEligibleForFree(worker: ActorVirtualIdentity): Boolean = {
-    !skewedToFreeWorkerFirstPhase.keySet.contains(
+  def isEligibleForFree(worker: ActorVirtualIdentity, skewedOpId: OperatorIdentity): Boolean = {
+    !skewedToFreeWorkerFirstPhase(skewedOpId).keySet.contains(
       worker
-    ) && !skewedToFreeWorkerFirstPhase.values.toList.contains(
+    ) && !skewedToFreeWorkerFirstPhase(skewedOpId).values.toList.contains(
       worker
-    ) && !skewedToFreeWorkerSecondPhase.keySet.contains(
+    ) && !skewedToFreeWorkerSecondPhase(skewedOpId).keySet.contains(
       worker
-    ) && !skewedToFreeWorkerSecondPhase.values.toList.contains(worker) && !skewedToFreeWorkerNetworkRolledBack.keySet.contains(
+    ) && !skewedToFreeWorkerSecondPhase(skewedOpId).values.toList.contains(worker) && !skewedToFreeWorkerNetworkRolledBack(skewedOpId).keySet.contains(
       worker
-    ) && !skewedToFreeWorkerNetworkRolledBack.values.toList.contains(
+    ) && !skewedToFreeWorkerNetworkRolledBack(skewedOpId).values.toList.contains(
       worker
     )
   }
@@ -132,11 +137,12 @@ object DetectSkewHandler {
   def passSkewTest(
       skewedWorkerCand: ActorVirtualIdentity,
       freeWorkerCand: ActorVirtualIdentity,
-      threshold: Double
+      threshold: Double,
+      skewedOpId: OperatorIdentity
   ): Boolean = {
     var isSkewed = true
-    val skewedHist = workerToLoadHistory(skewedWorkerCand)
-    val freeHist = workerToLoadHistory(freeWorkerCand)
+    val skewedHist = workerToLoadHistory(skewedOpId)(skewedWorkerCand)
+    val freeHist = workerToLoadHistory(skewedOpId)(freeWorkerCand)
     assert(skewedHist.size == freeHist.size)
     for (j <- 0 to skewedHist.size - 1) {
       if (skewedHist(j) < threshold + freeHist(j)) {
@@ -148,35 +154,36 @@ object DetectSkewHandler {
 
   // return is array of actual skewed worker and free getting skewed
   def isfreeGettingSkewed(
-      loads: mutable.HashMap[ActorVirtualIdentity, Long]
+      loads: mutable.HashMap[ActorVirtualIdentity, Long],
+      skewedOpId: OperatorIdentity
   ): ArrayBuffer[(ActorVirtualIdentity, ActorVirtualIdentity)] = {
     val ret = new ArrayBuffer[(ActorVirtualIdentity, ActorVirtualIdentity)]()
     val sortedWorkers = loads.keys.toList.sortBy(loads(_))
-    val freeWorkersInFirstPhase = skewedToFreeWorkerFirstPhase.values.toList
-    val freeWorkersInSecondPhase = skewedToFreeWorkerSecondPhase.values.toList
-    val freeWorkersAlreadyRolledBack = skewedToFreeWorkerNetworkRolledBack.values.toList
+    val freeWorkersInFirstPhase = skewedToFreeWorkerFirstPhase(skewedOpId).values.toList
+    val freeWorkersInSecondPhase = skewedToFreeWorkerSecondPhase(skewedOpId).values.toList
+    val freeWorkersAlreadyRolledBack = skewedToFreeWorkerNetworkRolledBack(skewedOpId).values.toList
     for (i <- 0 to sortedWorkers.size - 1) {
       if (!freeWorkersAlreadyRolledBack.contains(sortedWorkers(i)) && (freeWorkersInFirstPhase.contains(sortedWorkers(i)) || freeWorkersInSecondPhase.contains(sortedWorkers(i)))) {
         var actualSkewedWorker: ActorVirtualIdentity = null
-        skewedToFreeWorkerFirstPhase.keys.foreach(sw => {
-          if (skewedToFreeWorkerFirstPhase(sw) == sortedWorkers(i)) {
+        skewedToFreeWorkerFirstPhase(skewedOpId).keys.foreach(sw => {
+          if (skewedToFreeWorkerFirstPhase(skewedOpId)(sw) == sortedWorkers(i)) {
             actualSkewedWorker = sw
           }
         })
         if (actualSkewedWorker == null) {
-          skewedToFreeWorkerSecondPhase.keys.foreach(sw => {
-            if (skewedToFreeWorkerSecondPhase(sw) == sortedWorkers(i)) {
+          skewedToFreeWorkerSecondPhase(skewedOpId).keys.foreach(sw => {
+            if (skewedToFreeWorkerSecondPhase(skewedOpId)(sw) == sortedWorkers(i)) {
               actualSkewedWorker = sw
             }
           })
         }
         assert(actualSkewedWorker != null)
 
-        if (!Constants.onlyDetectSkew && passSkewTest(sortedWorkers(i), actualSkewedWorker, Constants.freeSkewedThreshold)) {
+        if (!Constants.onlyDetectSkew && passSkewTest(sortedWorkers(i), actualSkewedWorker, Constants.freeSkewedThreshold, skewedOpId)) {
           ret.append((actualSkewedWorker, sortedWorkers(i)))
           firstPhaseIterations(actualSkewedWorker) = firstPhaseIterations(actualSkewedWorker) + 1
-          skewedToFreeWorkerFirstPhase.remove(actualSkewedWorker)
-          skewedToFreeWorkerNetworkRolledBack(actualSkewedWorker) = sortedWorkers(i)
+          skewedToFreeWorkerFirstPhase(skewedOpId).remove(actualSkewedWorker)
+          skewedToFreeWorkerNetworkRolledBack(skewedOpId)(actualSkewedWorker) = sortedWorkers(i)
         }
       }
     }
@@ -185,16 +192,17 @@ object DetectSkewHandler {
 
   // return value is array of (skewedWorker, freeWorker, whether state replication has to be done)
   def getSkewedAndFreeWorkersEligibleForFirstPhase(
-      loads: mutable.HashMap[ActorVirtualIdentity, Long]
+      loads: mutable.HashMap[ActorVirtualIdentity, Long],
+      skewedOpId: OperatorIdentity
   ): ArrayBuffer[(ActorVirtualIdentity, ActorVirtualIdentity, Boolean)] = {
-    updateLoadHistory(loads)
+    updateLoadHistory(loads, skewedOpId)
     val ret = new ArrayBuffer[(ActorVirtualIdentity, ActorVirtualIdentity, Boolean)]()
     // Get workers in increasing load
     val sortedWorkers = loads.keys.toList.sortBy(loads(_))
 
     if (Constants.dynamicThreshold) {
       if (maxError < Constants.lowerErrorLimit && maxError != Double.MinValue) {
-        val possibleThreshold = (workerToLoadHistory(sortedWorkers(sortedWorkers.size - 1))(0) - workerToLoadHistory(sortedWorkers(0))(0)).toInt
+        val possibleThreshold = (workerToLoadHistory(skewedOpId)(sortedWorkers(sortedWorkers.size - 1))(0) - workerToLoadHistory(skewedOpId)(sortedWorkers(0))(0)).toInt
         if (possibleThreshold < Constants.threshold && possibleThreshold > 160) {
           Constants.threshold = possibleThreshold
           detectSkewLogger.logInfo(s"The threshold is now decreased to ${Constants.threshold}")
@@ -205,42 +213,42 @@ object DetectSkewHandler {
     if (!Constants.onlyDetectSkew && Constants.dynamicDistributionExp && !Constants.dynamicDistributionExpTrigger) {
       val skewed = WorkerActorVirtualIdentity("Layer(1,HashJoinGenerated-operator-cd435d3f-714c-4145-b7b9-8500c70c9124,main)[0]")
       val helper = WorkerActorVirtualIdentity("Layer(1,HashJoinGenerated-operator-cd435d3f-714c-4145-b7b9-8500c70c9124,main)[10]")
-      if (passSkewTest(skewed, helper, Constants.threshold)) {
+      if (passSkewTest(skewed, helper, Constants.threshold, skewedOpId)) {
         ret.append((skewed, helper, true))
         firstPhaseIterations(skewed) = 1
-        skewedToFreeWorkerFirstPhase(skewed) = helper
-        skewedToFreeWorkerHistory(skewed) = helper
+        skewedToFreeWorkerFirstPhase(skewedOpId)(skewed) = helper
+        skewedToFreeWorkerHistory(skewedOpId)(skewed) = helper
         Constants.dynamicDistributionExpTrigger = true
       }
     } else {
       for (i <- sortedWorkers.size - 1 to 0 by -1) {
-        if (isEligibleForSkewedAndForFirstPhase(sortedWorkers(i))) {
+        if (isEligibleForSkewedAndForFirstPhase(sortedWorkers(i), skewedOpId)) {
           // worker has been previously paired with some worker and that worker will be used again.
           // Also if the worker is in second phase, it will be put back in the first phase
-          if (skewedToFreeWorkerHistory.keySet.contains(sortedWorkers(i))) {
-            if (passSkewTest(sortedWorkers(i), skewedToFreeWorkerHistory(sortedWorkers(i)), Constants.threshold)) {
-              ret.append((sortedWorkers(i), skewedToFreeWorkerHistory(sortedWorkers(i)), false))
+          if (skewedToFreeWorkerHistory.contains(skewedOpId) && skewedToFreeWorkerHistory(skewedOpId).keySet.contains(sortedWorkers(i))) {
+            if (passSkewTest(sortedWorkers(i), skewedToFreeWorkerHistory(skewedOpId)(sortedWorkers(i)), Constants.threshold, skewedOpId)) {
+              ret.append((sortedWorkers(i), skewedToFreeWorkerHistory(skewedOpId)(sortedWorkers(i)), false))
               firstPhaseIterations(sortedWorkers(i)) = firstPhaseIterations(sortedWorkers(i)) + 1
-              skewedToFreeWorkerFirstPhase(sortedWorkers(i)) = skewedToFreeWorkerHistory(sortedWorkers(i))
-              skewedToFreeWorkerSecondPhase.remove(sortedWorkers(i)) // remove if there
-              skewedToFreeWorkerNetworkRolledBack.remove(sortedWorkers(i)) // remove if there
-            } else if (skewedToFreeWorkerNetworkRolledBack.contains(sortedWorkers(i))) {
-              if (passSkewTest(sortedWorkers(i), skewedToFreeWorkerHistory(sortedWorkers(i)), Constants.firstphaseThresholdWhenRollingBack)) {
-                ret.append((sortedWorkers(i), skewedToFreeWorkerHistory(sortedWorkers(i)), false))
+              skewedToFreeWorkerFirstPhase(skewedOpId)(sortedWorkers(i)) = skewedToFreeWorkerHistory(skewedOpId)(sortedWorkers(i))
+              skewedToFreeWorkerSecondPhase(skewedOpId).remove(sortedWorkers(i)) // remove if there
+              skewedToFreeWorkerNetworkRolledBack(skewedOpId).remove(sortedWorkers(i)) // remove if there
+            } else if (skewedToFreeWorkerNetworkRolledBack.contains(skewedOpId) && skewedToFreeWorkerNetworkRolledBack(skewedOpId).contains(sortedWorkers(i))) {
+              if (passSkewTest(sortedWorkers(i), skewedToFreeWorkerHistory(skewedOpId)(sortedWorkers(i)), Constants.firstphaseThresholdWhenRollingBack, skewedOpId)) {
+                ret.append((sortedWorkers(i), skewedToFreeWorkerHistory(skewedOpId)(sortedWorkers(i)), false))
                 firstPhaseIterations(sortedWorkers(i)) = firstPhaseIterations(sortedWorkers(i)) + 1
-                skewedToFreeWorkerFirstPhase(sortedWorkers(i)) = skewedToFreeWorkerHistory(sortedWorkers(i))
-                skewedToFreeWorkerSecondPhase.remove(sortedWorkers(i)) // remove if there
-                skewedToFreeWorkerNetworkRolledBack.remove(sortedWorkers(i)) // remove if there
+                skewedToFreeWorkerFirstPhase(skewedOpId)(sortedWorkers(i)) = skewedToFreeWorkerHistory(skewedOpId)(sortedWorkers(i))
+                skewedToFreeWorkerSecondPhase(skewedOpId).remove(sortedWorkers(i)) // remove if there
+                skewedToFreeWorkerNetworkRolledBack(skewedOpId).remove(sortedWorkers(i)) // remove if there
               }
             }
           } else if (i > 0) {
             breakable {
               for (j <- 0 to i - 1) {
-                if (isEligibleForFree(sortedWorkers(j)) && passSkewTest(sortedWorkers(i), sortedWorkers(j), Constants.threshold)) {
+                if (isEligibleForFree(sortedWorkers(j), skewedOpId) && passSkewTest(sortedWorkers(i), sortedWorkers(j), Constants.threshold, skewedOpId)) {
                   ret.append((sortedWorkers(i), sortedWorkers(j), true))
                   firstPhaseIterations(sortedWorkers(i)) = 1
-                  skewedToFreeWorkerFirstPhase(sortedWorkers(i)) = sortedWorkers(j)
-                  skewedToFreeWorkerHistory(sortedWorkers(i)) = sortedWorkers(j)
+                  skewedToFreeWorkerFirstPhase(skewedOpId)(sortedWorkers(i)) = sortedWorkers(j)
+                  skewedToFreeWorkerHistory(skewedOpId)(sortedWorkers(i)) = sortedWorkers(j)
                   break
                 }
               }
@@ -259,18 +267,19 @@ object DetectSkewHandler {
 
   // return value is array of (skewedWorker, freeWorker)
   def getSkewedAndFreeWorkersEligibleForSecondPhase(
-      loads: mutable.HashMap[ActorVirtualIdentity, Long]
+      loads: mutable.HashMap[ActorVirtualIdentity, Long],
+      skewedOpId: OperatorIdentity
   ): ArrayBuffer[(ActorVirtualIdentity, ActorVirtualIdentity)] = {
     val ret = new ArrayBuffer[(ActorVirtualIdentity, ActorVirtualIdentity)]()
-    skewedToFreeWorkerFirstPhase.keys.foreach(skewedWorker => {
+    skewedToFreeWorkerFirstPhase(skewedOpId).keys.foreach(skewedWorker => {
       if (
-        loads(skewedWorker) <= loads(skewedToFreeWorkerFirstPhase(skewedWorker)) && (loads(skewedToFreeWorkerFirstPhase(skewedWorker)) - loads(
+        loads(skewedWorker) <= loads(skewedToFreeWorkerFirstPhase(skewedOpId)(skewedWorker)) && (loads(skewedToFreeWorkerFirstPhase(skewedOpId)(skewedWorker)) - loads(
           skewedWorker
         ) < Constants.freeSkewedThreshold)
       ) {
-        ret.append((skewedWorker, skewedToFreeWorkerFirstPhase(skewedWorker)))
-        skewedToFreeWorkerSecondPhase(skewedWorker) = skewedToFreeWorkerFirstPhase(skewedWorker)
-        skewedToFreeWorkerFirstPhase.remove(skewedWorker)
+        ret.append((skewedWorker, skewedToFreeWorkerFirstPhase(skewedOpId)(skewedWorker)))
+        skewedToFreeWorkerSecondPhase(skewedOpId)(skewedWorker) = skewedToFreeWorkerFirstPhase(skewedOpId)(skewedWorker)
+        skewedToFreeWorkerFirstPhase(skewedOpId).remove(skewedWorker)
       }
     })
     if (Constants.onlyDetectSkew) {
@@ -342,22 +351,23 @@ trait DetectSkewHandler {
       workerLayer: WorkerLayer,
       skewedAndFreeWorkersList: ArrayBuffer[
         (ActorVirtualIdentity, ActorVirtualIdentity)
-      ]
+      ],
+      skewedOpId: OperatorIdentity
   ): Future[Seq[Unit]] = {
     val futuresArr = new ArrayBuffer[Future[Unit]]()
     var maxErrorAtSecondPhaseStart = Double.MinValue
     skewedAndFreeWorkersList.foreach(sf => {
       workerLayer.workers.keys.foreach(id => {
         if (
-          workerToTotalLoadHistory.contains(id) && workerToTotalLoadHistory(id)
-            .contains(sf._1) && workerToTotalLoadHistory(id).contains(sf._2)
+          workerToTotalLoadHistory(skewedOpId).contains(id) && workerToTotalLoadHistory(skewedOpId)(id)
+            .contains(sf._1) && workerToTotalLoadHistory(skewedOpId)(id).contains(sf._2)
         ) {
-          var skewedLoad = AmberUtils.mean(workerToTotalLoadHistory(id)(sf._1))
-          val skewedEstimateError = AmberUtils.sampleMeanError(workerToTotalLoadHistory(id)(sf._1))
-          val skewedHistorySize = workerToTotalLoadHistory(id)(sf._1).size
-          var freeLoad = AmberUtils.mean(workerToTotalLoadHistory(id)(sf._2))
-          val freeEstimateError = AmberUtils.sampleMeanError(workerToTotalLoadHistory(id)(sf._2))
-          val freeHistorySize = workerToTotalLoadHistory(id)(sf._2).size
+          var skewedLoad = AmberUtils.mean(workerToTotalLoadHistory(skewedOpId)(id)(sf._1))
+          val skewedEstimateError = AmberUtils.sampleMeanError(workerToTotalLoadHistory(skewedOpId)(id)(sf._1))
+          val skewedHistorySize = workerToTotalLoadHistory(skewedOpId)(id)(sf._1).size
+          var freeLoad = AmberUtils.mean(workerToTotalLoadHistory(skewedOpId)(id)(sf._2))
+          val freeEstimateError = AmberUtils.sampleMeanError(workerToTotalLoadHistory(skewedOpId)(id)(sf._2))
+          val freeHistorySize = workerToTotalLoadHistory(skewedOpId)(id)(sf._2).size
           if (Constants.dynamicThreshold) {
             if (skewedEstimateError > maxErrorAtSecondPhaseStart && skewedEstimateError != Double.MaxValue) {
               maxErrorAtSecondPhaseStart = skewedEstimateError
@@ -367,8 +377,8 @@ trait DetectSkewHandler {
             }
           }
           val redirectNum = ((skewedLoad - freeLoad) / 2).toLong
-          workerToTotalLoadHistory(id)(sf._1) = new ArrayBuffer[Long]()
-          workerToTotalLoadHistory(id)(sf._2) = new ArrayBuffer[Long]()
+          workerToTotalLoadHistory(skewedOpId)(id)(sf._1) = new ArrayBuffer[Long]()
+          workerToTotalLoadHistory(skewedOpId)(id)(sf._2) = new ArrayBuffer[Long]()
           if (skewedLoad == 0) {
             skewedLoad = 1
           }
@@ -437,11 +447,13 @@ trait DetectSkewHandler {
     })
     detectSkewLogger.logInfo(s"\tThe full loads map \n total# ${aggregatedSentCount.mkString("\n total# ")}")
     maxError = Double.MinValue
+    val skewedOpId = cmd.joinLayer.id.toOperatorIdentity
     for ((prevWId, replyFromPrevId) <- cmd.probeLayer.workers.keys zip metrics._2) {
-      var prevWorkerMap = workerToTotalLoadHistory.getOrElse(
-        prevWId,
-        new mutable.HashMap[ActorVirtualIdentity, ArrayBuffer[Long]]()
-      )
+      var prevWorkerMap = workerToTotalLoadHistory(skewedOpId)
+        .getOrElse(
+          prevWId,
+          new mutable.HashMap[ActorVirtualIdentity, ArrayBuffer[Long]]()
+        )
       for ((wid, loadHistory) <- replyFromPrevId._2.history) {
         var existingHistoryForWid = prevWorkerMap.getOrElse(wid, new ArrayBuffer[Long]())
         existingHistoryForWid.appendAll(loadHistory)
@@ -469,7 +481,7 @@ trait DetectSkewHandler {
         //        }
         prevWorkerMap(wid) = existingHistoryForWid
       }
-      workerToTotalLoadHistory(prevWId) = prevWorkerMap
+      workerToTotalLoadHistory(skewedOpId)(prevWId) = prevWorkerMap
     }
     detectSkewLogger.logInfo(s"MAX ERROR FOR THIS ITERATION IS =  ${maxError}")
     loads
@@ -494,130 +506,148 @@ trait DetectSkewHandler {
 
   registerHandler { (cmd: DetectSkew, sender) =>
     {
-      if (!previousCallFinished.contains(cmd.joinLayer.id.toOperatorIdentity)) {
-        previousCallFinished(cmd.joinLayer.id.toOperatorIdentity) = true
-        convertToFirstPhaseCallFinished(cmd.joinLayer.id.toOperatorIdentity) = true
-        convertToSecondPhaseCallFinished(cmd.joinLayer.id.toOperatorIdentity) = true
-        stopMitigationCallFinished(cmd.joinLayer.id.toOperatorIdentity) = true
+      val skewedOpId = cmd.joinLayer.id.toOperatorIdentity
+      if (!previousCallFinished.contains(skewedOpId)) {
+        previousCallFinished(skewedOpId) = true
+        convertToFirstPhaseCallFinished(skewedOpId) = true
+        convertToSecondPhaseCallFinished(skewedOpId) = true
+        stopMitigationCallFinished(skewedOpId) = true
+        iterationCount(skewedOpId) = 1
+        skewedToFreeWorkerFirstPhase(skewedOpId) = new mutable.HashMap[ActorVirtualIdentity, ActorVirtualIdentity]()
+        skewedToFreeWorkerSecondPhase(skewedOpId) = new mutable.HashMap[ActorVirtualIdentity, ActorVirtualIdentity]()
+        skewedToFreeWorkerNetworkRolledBack(skewedOpId) = new mutable.HashMap[ActorVirtualIdentity, ActorVirtualIdentity]()
+        skewedToFreeWorkerHistory(skewedOpId) = new mutable.HashMap[ActorVirtualIdentity, ActorVirtualIdentity]()
+        workerToLoadHistory(skewedOpId) = new mutable.HashMap[ActorVirtualIdentity, ListBuffer[Long]]()
+        workerToTotalLoadHistory(skewedOpId) = new mutable.HashMap[ActorVirtualIdentity, mutable.HashMap[ActorVirtualIdentity, ArrayBuffer[Long]]]()
       }
-      if (
-        previousCallFinished(cmd.joinLayer.id.toOperatorIdentity) && convertToFirstPhaseCallFinished(cmd.joinLayer.id.toOperatorIdentity) &&
-        convertToSecondPhaseCallFinished(cmd.joinLayer.id.toOperatorIdentity) && stopMitigationCallFinished(cmd.joinLayer.id.toOperatorIdentity)
-      ) {
-        previousCallFinished(cmd.joinLayer.id.toOperatorIdentity) = false
-        println(s"\n\nNEW ITERATION ${iterationCount}")
-        iterationCount += 1
-        startTimeForMetricColl = System.nanoTime()
-        Future
-          .join(
-            getResultsAsFuture(cmd.joinLayer, QueryLoadMetrics()),
-            getResultsAsFuture(cmd.probeLayer, QueryNextOpLoadMetrics())
-          )
-          .flatMap(metrics => {
-            endTimeForMetricColl = System.nanoTime()
-            detectSkewLogger.logInfo(
-              s"\tThe metrics have been collected in ${(endTimeForMetricColl - startTimeForMetricColl) / 1e9d}s"
+
+      try {
+        if (
+          previousCallFinished(skewedOpId) && convertToFirstPhaseCallFinished(skewedOpId) &&
+          convertToSecondPhaseCallFinished(skewedOpId) && stopMitigationCallFinished(skewedOpId)
+        ) {
+          previousCallFinished(skewedOpId) = false
+          println(s"\n\nNEW ITERATION for ${skewedOpId.operator} ${iterationCount(skewedOpId)}")
+          iterationCount(skewedOpId) += 1
+          startTimeForMetricColl(skewedOpId) = System.nanoTime()
+          Future
+            .join(
+              getResultsAsFuture(cmd.joinLayer, QueryLoadMetrics()),
+              getResultsAsFuture(cmd.probeLayer, QueryNextOpLoadMetrics())
             )
-            val loads = aggregateLoadMetrics(cmd, metrics)
-            detectSkewLogger.logInfo(s"\tThe final loads map ${loads.mkString("\n\t\t")}")
+            .flatMap(metrics => {
+              endTimeForMetricColl(skewedOpId) = System.nanoTime()
+              detectSkewLogger.logInfo(
+                s"\tThe metrics have been collected in ${(endTimeForMetricColl(skewedOpId) - startTimeForMetricColl(skewedOpId)) / 1e9d}s"
+              )
+              val loads = aggregateLoadMetrics(cmd, metrics)
+              detectSkewLogger.logInfo(s"\tThe final loads map ${loads.mkString("\n\t\t")}")
 
-            // Start first phase for workers getting skewed for first time or in second phase
-            val skewedAndFreeWorkersForFirstPhase =
-              getSkewedAndFreeWorkersEligibleForFirstPhase(loads)
-            if (skewedAndFreeWorkersForFirstPhase.size > 0) {
-              convertToFirstPhaseCallFinished(cmd.joinLayer.id.toOperatorIdentity) = false
-              startTimeForBuildRepl = System.nanoTime()
+              // Start first phase for workers getting skewed for first time or in second phase
+              val skewedAndFreeWorkersForFirstPhase =
+                getSkewedAndFreeWorkersEligibleForFirstPhase(loads, skewedOpId)
+              if (skewedAndFreeWorkersForFirstPhase.size > 0) {
+                convertToFirstPhaseCallFinished(skewedOpId) = false
+                startTimeForBuildRepl(skewedOpId) = System.nanoTime()
 
-              val futuresArr = new ArrayBuffer[Future[Seq[Unit]]]()
-              skewedAndFreeWorkersForFirstPhase.foreach(sf => {
-                detectSkewLogger.logInfo(
-                  s"\tSkewed Worker:${sf._1}, Free Worker:${sf._2}, build replication:${sf._3}"
-                )
-                if (sf._3) {
-                  futuresArr.append(send(SendBuildTable(sf._2), sf._1))
-                }
-              })
-              Future
-                .collect(futuresArr)
-                .flatMap(res => {
-                  endTimeForBuildRepl = System.nanoTime()
+                val futuresArr = new ArrayBuffer[Future[Seq[Unit]]]()
+                skewedAndFreeWorkersForFirstPhase.foreach(sf => {
                   detectSkewLogger.logInfo(
-                    s"\tBUILD TABLES COPIED in ${(endTimeForBuildRepl - startTimeForBuildRepl) / 1e9d}s"
+                    s"\tSkewed Worker:${sf._1}, Free Worker:${sf._2}, build replication:${sf._3}"
                   )
-
-                  startTimeForNetChange = System.nanoTime()
-                  getShareFlowFirstPhaseResultsAsFuture(
-                    cmd.probeLayer,
-                    skewedAndFreeWorkersForFirstPhase
-                  ).map(seq => {
-                    endTimeForNetChange = System.nanoTime()
-                    // aggregateAndPrintSentCount(seq)
-                    detectSkewLogger.logInfo(
-                      s"\tTHE NETWORK SHARE HAS HAPPENED in ${(endTimeForNetChange - startTimeForNetChange) / 1e9d}s"
-                    )
-                    convertToFirstPhaseCallFinished(cmd.joinLayer.id.toOperatorIdentity) = true
-                  })
+                  if (sf._3) {
+                    futuresArr.append(send(SendBuildTable(sf._2), sf._1))
+                  }
                 })
-            }
-            println()
-            println(s"First phase iterations ${firstPhaseIterations.mkString("\n\t\t")}")
+                Future
+                  .collect(futuresArr)
+                  .flatMap(res => {
+                    endTimeForBuildRepl(skewedOpId) = System.nanoTime()
+                    detectSkewLogger.logInfo(
+                      s"\tBUILD TABLES COPIED in ${(endTimeForBuildRepl(skewedOpId) - startTimeForBuildRepl(skewedOpId)) / 1e9d}s"
+                    )
 
-            // check the pairs in first phase and see if they have to be shifted to second phase
-            val skewedAndFreeWorkersForSecondPhase =
-              getSkewedAndFreeWorkersEligibleForSecondPhase(loads)
-            if (skewedAndFreeWorkersForSecondPhase.size > 0) {
-              convertToSecondPhaseCallFinished(cmd.joinLayer.id.toOperatorIdentity) = false
-              skewedAndFreeWorkersForSecondPhase.foreach(sf =>
-                detectSkewLogger.logInfo(
-                  s"\tSkewed Worker:${sf._1}, Free Worker:${sf._2} moving to second phase"
-                )
-              )
-              startTimeForNetChangeForSecondPhase = System.nanoTime()
-              getShareFlowSecondPhaseResultsAsFuture(
-                cmd.probeLayer,
-                skewedAndFreeWorkersForSecondPhase
-              ).map(seq => {
-                endTimeForNetChangeForSecondPhase = System.nanoTime()
-                detectSkewLogger.logInfo(
-                  s"\tTHE SECOND PHASE NETWORK SHARE HAS HAPPENED in ${(endTimeForNetChangeForSecondPhase - startTimeForNetChangeForSecondPhase) / 1e9d}s"
-                )
-                convertToSecondPhaseCallFinished(cmd.joinLayer.id.toOperatorIdentity) = true
-              })
-            }
+                    startTimeForNetChange(skewedOpId) = System.nanoTime()
+                    getShareFlowFirstPhaseResultsAsFuture(
+                      cmd.probeLayer,
+                      skewedAndFreeWorkersForFirstPhase
+                    ).map(seq => {
+                      endTimeForNetChange(skewedOpId) = System.nanoTime()
+                      // aggregateAndPrintSentCount(seq)
+                      detectSkewLogger.logInfo(
+                        s"\tTHE NETWORK SHARE HAS HAPPENED in ${(endTimeForNetChange(skewedOpId) - startTimeForNetChange(skewedOpId)) / 1e9d}s"
+                      )
+                      convertToFirstPhaseCallFinished(skewedOpId) = true
+                    })
+                  })
+              }
+              println()
+              println(s"First phase iterations ${firstPhaseIterations.mkString("\n\t\t")}")
 
-            // stop mitigation for worker pairs where mitigation is causing free worker to become skewed
-            val actualSkewedAndFreeGettingSkewedWorkers = isfreeGettingSkewed(loads)
-            if (actualSkewedAndFreeGettingSkewedWorkers.size > 0) {
-              stopMitigationCallFinished(cmd.joinLayer.id.toOperatorIdentity) = false
-              actualSkewedAndFreeGettingSkewedWorkers.foreach(sf =>
-                detectSkewLogger.logInfo(
-                  s"\tFree Worker Getting skewed:${sf._2}, Actual skewed Worker:${sf._1}"
+              // check the pairs in first phase and see if they have to be shifted to second phase
+              val skewedAndFreeWorkersForSecondPhase =
+                getSkewedAndFreeWorkersEligibleForSecondPhase(loads, skewedOpId)
+              if (skewedAndFreeWorkersForSecondPhase.size > 0) {
+                convertToSecondPhaseCallFinished(skewedOpId) = false
+                skewedAndFreeWorkersForSecondPhase.foreach(sf =>
+                  detectSkewLogger.logInfo(
+                    s"\tSkewed Worker:${sf._1}, Free Worker:${sf._2} moving to second phase"
+                  )
                 )
-              )
+                startTimeForNetChangeForSecondPhase(skewedOpId) = System.nanoTime()
+                getShareFlowSecondPhaseResultsAsFuture(
+                  cmd.probeLayer,
+                  skewedAndFreeWorkersForSecondPhase,
+                  skewedOpId
+                ).map(seq => {
+                  endTimeForNetChangeForSecondPhase(skewedOpId) = System.nanoTime()
+                  detectSkewLogger.logInfo(
+                    s"\tTHE SECOND PHASE NETWORK SHARE HAS HAPPENED in ${(endTimeForNetChangeForSecondPhase(skewedOpId) - startTimeForNetChangeForSecondPhase(skewedOpId)) / 1e9d}s"
+                  )
+                  convertToSecondPhaseCallFinished(skewedOpId) = true
+                })
+              }
 
-              startTimeForNetRollback = System.nanoTime()
-              getRollbackFlowResultsAsFuture(
-                cmd.probeLayer,
-                actualSkewedAndFreeGettingSkewedWorkers
-              ).map(seq => {
-                startTimeForNetRollback = System.nanoTime()
-                // aggregateAndPrintSentCount(seq)
-                detectSkewLogger.logInfo(
-                  s"\tTHE NETWORK ROLLBACK HAS HAPPENED in ${(endTimeForNetChange - startTimeForNetChange) / 1e9d}s"
+              // stop mitigation for worker pairs where mitigation is causing free worker to become skewed
+              val actualSkewedAndFreeGettingSkewedWorkers = isfreeGettingSkewed(loads, skewedOpId)
+              if (actualSkewedAndFreeGettingSkewedWorkers.size > 0) {
+                stopMitigationCallFinished(skewedOpId) = false
+                actualSkewedAndFreeGettingSkewedWorkers.foreach(sf =>
+                  detectSkewLogger.logInfo(
+                    s"\tFree Worker Getting skewed:${sf._2}, Actual skewed Worker:${sf._1}"
+                  )
                 )
-                stopMitigationCallFinished(cmd.joinLayer.id.toOperatorIdentity) = true
-              })
-            }
 
-            previousCallFinished(cmd.joinLayer.id.toOperatorIdentity) = true
-            Future {
-              CommandCompleted()
-            }
-          })
-      } else {
-        Future {
-          CommandCompleted()
+                startTimeForNetRollback(skewedOpId) = System.nanoTime()
+                getRollbackFlowResultsAsFuture(
+                  cmd.probeLayer,
+                  actualSkewedAndFreeGettingSkewedWorkers
+                ).map(seq => {
+                  startTimeForNetRollback(skewedOpId) = System.nanoTime()
+                  // aggregateAndPrintSentCount(seq)
+                  detectSkewLogger.logInfo(
+                    s"\tTHE NETWORK ROLLBACK HAS HAPPENED in ${(endTimeForNetChange(skewedOpId) - startTimeForNetChange(skewedOpId)) / 1e9d}s"
+                  )
+                  stopMitigationCallFinished(skewedOpId) = true
+                })
+              }
+
+              previousCallFinished(skewedOpId) = true
+              Future {
+                CommandCompleted()
+              }
+            })
+        } else {
+          Future {
+            CommandCompleted()
+          }
         }
+      } catch {
+        case e: Exception =>
+          println(s"Exception occured for ${skewedOpId.operator}'s detect skew call - ${e.getStackTrace().mkString(",\n\t")}")
+          Future {
+            CommandCompleted()
+          }
       }
     }
   }
