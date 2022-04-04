@@ -1,74 +1,25 @@
-package edu.uci.ics.texera.workflow.operators.hashJoin
+package edu.uci.ics.texera.workflow.operators.hashJoinExpensive
 
+import edu.uci.ics.amber.engine.common.InputExhausted
 import edu.uci.ics.amber.engine.common.amberexception.WorkflowRuntimeException
-import edu.uci.ics.amber.engine.common.{InputExhausted, WorkflowLogger}
+import edu.uci.ics.amber.engine.common.virtualidentity.LinkIdentity
 import edu.uci.ics.amber.error.WorkflowRuntimeError
 import edu.uci.ics.texera.workflow.common.operators.OperatorExecutor
 import edu.uci.ics.texera.workflow.common.tuple.Tuple
 import edu.uci.ics.texera.workflow.common.tuple.schema.{Attribute, Schema}
-import org.apache.avro.SchemaBuilder
-import java.util
-
-import edu.uci.ics.amber.engine.common.virtualidentity.{LinkIdentity, OperatorIdentity}
+import edu.uci.ics.texera.workflow.operators.hashJoin.HashJoinOpExec
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-class HashJoinOpExec[K](
-    val buildTable: LinkIdentity,
-    val buildAttributeName: String,
-    val probeAttributeName: String
-) extends OperatorExecutor {
+class HashJoinExpensiveOpExec[K](
+    val buildTable1: LinkIdentity,
+    val buildAttributeName1: String,
+    val probeAttributeName1: String
+) extends HashJoinOpExec[K](buildTable1, buildAttributeName1, probeAttributeName1) {
 
-  var isBuildTableFinished: Boolean = false
-  var buildTableHashMap: mutable.HashMap[K, ArrayBuffer[Tuple]] = _
-  var outputProbeSchema: Schema = _
-
-  var currentEntry: Iterator[Tuple] = _
-  var currentTuple: Tuple = _
-
-  def getBuildHashTable(): ArrayBuffer[mutable.HashMap[K, ArrayBuffer[Tuple]]] = {
-    val sendingMap = new ArrayBuffer[mutable.HashMap[K, ArrayBuffer[Tuple]]]
-    var count = 1
-    var curr = new mutable.HashMap[K, ArrayBuffer[Tuple]]
-    for ((key, tuples) <- buildTableHashMap) {
-      curr.put(key, tuples)
-      if (count % 4000 == 0) {
-        sendingMap.append(curr)
-        curr = new mutable.HashMap[K, ArrayBuffer[Tuple]]
-      }
-      count += 1
-    }
-    if (!curr.isEmpty) sendingMap.append(curr)
-    sendingMap
-  }
-
-  def addToHashTable(additionalTable: mutable.HashMap[K, ArrayBuffer[Tuple]]): Unit = {
-    for ((key, tuples) <- additionalTable) {
-      val existingTuples = buildTableHashMap.getOrElse(key, new ArrayBuffer[Tuple]())
-      existingTuples.appendAll(tuples)
-      buildTableHashMap(key) = existingTuples
-    }
-  }
-
-  // probe attribute removed in the output schema
-  def createOutputProbeSchema(buildTuple: Tuple, probeTuple: Tuple) = {
-    val buildSchema = buildTuple.getSchema()
-    val probeSchema = probeTuple.getSchema()
-    var builder = Schema.newBuilder()
-    probeSchema
-      .getAttributes()
-      .forEach(attr => {
-        if (attr.getName() != probeAttributeName) {
-          if (buildSchema.containsAttribute(attr.getName())) {
-            builder.add(new Attribute(s"${attr.getName()}#@1", attr.getType()))
-          } else {
-            builder.add(attr)
-          }
-        }
-      })
-    builder.build()
-  }
+  val keyWords: Array[String] = Array("1152", "33313", "3131", "2353", "313213", "32423", "2523");
+  var countFound = 0
 
   override def processTexeraTuple(
       tuple: Either[Tuple, InputExhausted],
@@ -97,6 +48,13 @@ class HashJoinOpExec[K](
             val key = t.getField(probeAttributeName).asInstanceOf[K]
             val storedTuples = buildTableHashMap.getOrElse(key, new ArrayBuffer[Tuple]())
             var tuplesToOutput: ArrayBuffer[Tuple] = new ArrayBuffer[Tuple]()
+            for (i <- 0 to 2) {
+              keyWords.foreach(k => {
+                if (key.asInstanceOf[String].contains(k)) {
+                  countFound += 1
+                }
+              })
+            }
             if (storedTuples.isEmpty) {
               return Iterator()
             }
@@ -136,16 +94,9 @@ class HashJoinOpExec[K](
             )
           }
         }
+        println(s"CountFound is ${countFound}")
         Iterator()
 
     }
-  }
-
-  override def open(): Unit = {
-    buildTableHashMap = new mutable.HashMap[K, mutable.ArrayBuffer[Tuple]]()
-  }
-
-  override def close(): Unit = {
-    buildTableHashMap.clear()
   }
 }
