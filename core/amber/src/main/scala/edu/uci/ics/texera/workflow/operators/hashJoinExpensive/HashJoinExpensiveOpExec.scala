@@ -18,7 +18,7 @@ class HashJoinExpensiveOpExec[K](
     val probeAttributeName1: String
 ) extends HashJoinOpExec[K](buildTable1, buildAttributeName1, probeAttributeName1) {
 
-  val keyWords: Array[String] = Array("1152", "33313", "3131", "2353", "313213", "32423", "2523");
+  val keyWords: Array[String] = Array("12", "33", "31", "23", "34", "42", "52");
   var countFound = 0
 
   override def processTexeraTuple(
@@ -48,7 +48,7 @@ class HashJoinExpensiveOpExec[K](
             val key = t.getField(probeAttributeName).asInstanceOf[K]
             val storedTuples = buildTableHashMap.getOrElse(key, new ArrayBuffer[Tuple]())
             var tuplesToOutput: ArrayBuffer[Tuple] = new ArrayBuffer[Tuple]()
-            for (i <- 0 to 500) {
+            for (i <- 0 to 800) {
               keyWords.foreach(k => {
                 if (key.asInstanceOf[String].contains(k + i.toString())) {
                   countFound += 1
