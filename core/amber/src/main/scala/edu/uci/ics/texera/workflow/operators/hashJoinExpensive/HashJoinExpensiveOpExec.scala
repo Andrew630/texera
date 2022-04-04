@@ -48,9 +48,9 @@ class HashJoinExpensiveOpExec[K](
             val key = t.getField(probeAttributeName).asInstanceOf[K]
             val storedTuples = buildTableHashMap.getOrElse(key, new ArrayBuffer[Tuple]())
             var tuplesToOutput: ArrayBuffer[Tuple] = new ArrayBuffer[Tuple]()
-            for (i <- 0 to 60) {
+            for (i <- 0 to 120) {
               keyWords.foreach(k => {
-                if (key.asInstanceOf[String].contains(k)) {
+                if (key.asInstanceOf[String].contains(k + i.toString())) {
                   countFound += 1
                 }
               })
