@@ -16,4 +16,15 @@ class HashJoinExpensiveOpExecConfig[K](
     id: OperatorIdentity,
     val probeAttributeName1: String,
     val buildAttributeName1: String
-) extends HashJoinOpExecConfig[K](id, probeAttributeName1, buildAttributeName1) {}
+) extends HashJoinOpExecConfig[K](id, probeAttributeName1, buildAttributeName1) {
+  
+  override def checkStartDependencies(workflow: Workflow): Unit = {
+    val buildLink = inputToOrdinalMapping.find(pair => pair._2 == 0).get._1
+    buildTable = buildLink
+    val probeLink = inputToOrdinalMapping.find(pair => pair._2 == 1).get._1
+    workflow.getSources(probeLink.from.toOperatorIdentity).foreach { source =>
+      workflow.getOperator(source).topology.layers.head.startAfter(buildLink)
+    }
+    topology.layers.head.metadata = _ => new HashJoinExpensiveOpExec[K](buildTable, buildAttributeName, probeAttributeName)
+  }
+}
