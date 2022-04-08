@@ -17,6 +17,9 @@ import {
 } from "../../types/collab-websocket.interface";
 import { CommandMessage } from "../../types/command.interface";
 import { History } from "../undo-redo/History.service";
+import { SerializableRecorder } from "../undo-redo/SerializableRecorder";
+import { JSONparse, JSONstringify, Serializable } from "src/app/common/util/serializable-tree";
+import { SerializableReplayer } from "../undo-redo/SerializableReplayer";
 
 export const WS_HEARTBEAT_INTERVAL_MS = 10000;
 export const WS_RECONNECT_INTERVAL_MS = 3000;
@@ -53,7 +56,16 @@ export class WorkflowCollabService {
     // In case collab is not enabled, lock should always be granted.
     this.setLockStatus(true);
 
-    History.bindWorkflowCollabService(this);
+    SerializableRecorder.getSerializableCallEventStream().subscribe( (event) => {
+      this.send("HistoryRequest", {
+        payload: JSONstringify(event as unknown as Serializable)
+      });
+    });
+
+    this.getHistStream().subscribe((historyMessage: HistoryMessage) => {
+      console.log(`recieve ${String(historyMessage.methodName)}(${historyMessage.args})`);
+      SerializableReplayer.replaySerializable(historyMessage);
+    });
 
     if (this.isCollabEnabled()) {
       this.setPropagationEnabled(true);
@@ -65,7 +77,7 @@ export class WorkflowCollabService {
       });
 
       this.subscribeToEvent("HistoryEvent").subscribe(historyEvent => {
-        const message = JSON.parse(historyEvent.payload) as HistoryMessage;
+        const message = JSONparse(historyEvent.payload) as HistoryMessage;
         this.historyMessageSubject.next(message);
       });
 
@@ -191,6 +203,7 @@ export class WorkflowCollabService {
       type,
       ...payload,
     } as any as CollabWebsocketRequest;
+    console.log(payload);
     this.websocket?.next(request);
   }
 

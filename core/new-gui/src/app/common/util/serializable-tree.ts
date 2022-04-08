@@ -32,7 +32,7 @@ type Primitive = null | boolean | number | string
 
 type SerializableMap = Map<string, Serializable>
 
-type JsonObject =  {
+export type JsonObject =  {
     [x: string]: Serializable;
 }
 
@@ -55,8 +55,8 @@ export type getRestArgTypeFromFunction<T> = T extends (...args: infer V) => any
     : never
 
 // Given a function type T, returns type never if the function's arguments aren't serializable
-// i.e FunctionWithSerializableArgs<(arg0: boolean) => void> == (arg0: boolean) => void
-// i.e FunctionWithSerializableArgs<(arg0: object) => void> == never
+// ex. FunctionWithSerializableArgs<(arg0: boolean) => void> == (arg0: boolean) => void
+// ex. FunctionWithSerializableArgs<(arg0: object) => void> == never
 export type FunctionWithSerializableArgs<T> = T extends () => any
     ? T
     : T extends (arg0: infer U, ...rest: any[]) => any

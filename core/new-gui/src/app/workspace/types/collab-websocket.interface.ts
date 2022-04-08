@@ -1,4 +1,5 @@
 import { Serializable } from "src/app/common/util/serializable-tree";
+import { SerializableCallEvent } from "../service/undo-redo/EventSerializer";
 
 export interface WIdRequest
   extends Readonly<{
@@ -25,12 +26,7 @@ export interface HistoryEvent extends Readonly<{
   payload: string;
   }> {}
 
-export interface HistoryMessage extends Readonly<{
-  className: string, 
-  instanceNumber: number,
-  methodName: string,
-  serializedArgs: string
-  }> {}
+export interface HistoryMessage extends Readonly<SerializableCallEvent> {}
 export interface WorkflowAccessEvent
   extends Readonly<{
     workflowReadonly: boolean;

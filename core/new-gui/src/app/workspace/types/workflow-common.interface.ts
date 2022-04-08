@@ -1,4 +1,5 @@
 import { JSONSchema7 } from "json-schema";
+import { Serializable } from "src/app/common/util/serializable-tree";
 
 /**
  * This file contains multiple type declarations related to workflow-graph.
@@ -38,12 +39,11 @@ export interface Comment
     creatorID: number;
   }> {}
 
-export interface CommentBox {
+export type CommentBox = {
   commentBoxID: string;
   comments: Comment[];
   commentBoxPosition: Point;
 }
-
 export interface OperatorLink
   extends Readonly<{
     linkID: string;

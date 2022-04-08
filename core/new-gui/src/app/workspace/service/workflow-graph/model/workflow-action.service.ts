@@ -29,6 +29,9 @@ import { WorkflowCollabService } from "../../workflow-collab/workflow-collab.ser
 import { Command, commandFuncs, CommandMessage } from "src/app/workspace/types/command.interface";
 import { isDefined } from "../../../../common/util/predicate";
 import { History } from "../../undo-redo/History.service";
+import { Recorder } from "../../undo-redo/Recorder";
+import { SerializableRecorder } from "../../undo-redo/SerializableRecorder";
+import { JsonObject, Serializable } from "src/app/common/util/serializable-tree";
 
 type OperatorPosition = {
   position: Point;
@@ -54,10 +57,11 @@ type GroupInfo = {
  *
  */
 
+
+@SerializableRecorder.captureClass
 @Injectable({
   providedIn: "root",
 })
-@History.registerClass
 export class WorkflowActionService {
   private static readonly DEFAULT_WORKFLOW_NAME = "Untitled Workflow";
   private static readonly DEFAULT_WORKFLOW = {
@@ -393,6 +397,7 @@ export class WorkflowActionService {
    * @param operator
    * @param point
    */
+  @SerializableRecorder.captureMethod()
   public addOperator(operator: OperatorPredicate, point: Point): void {
     // remember currently highlighted operators and groups
     const currentHighlights = this.jointGraphWrapper.getCurrentHighlights();
@@ -419,7 +424,7 @@ export class WorkflowActionService {
       },
     };
     const commandMessage: CommandMessage = { action: "addOperator", parameters: [operator, point], type: "execute" };
-    this.executeStoreAndPropagateCommand(command, commandMessage);
+    this.executeStoreAndPropagateCommand(command);
   }
 
   /**
@@ -427,6 +432,7 @@ export class WorkflowActionService {
    * Throws an Error if the operator ID doesn't exist in the Workflow Graph.
    * @param operatorID
    */
+  @SerializableRecorder.captureMethod()
   public deleteOperator(operatorID: string): void {
     const operator = this.getTexeraGraph().getOperator(operatorID);
     const point = this.getOperatorGroup().getOperatorPositionByGroup(operatorID);
@@ -472,9 +478,10 @@ export class WorkflowActionService {
     };
 
     const commandMessage: CommandMessage = { action: "deleteOperator", parameters: [operatorID], type: "execute" };
-    this.executeStoreAndPropagateCommand(command, commandMessage);
+    this.executeStoreAndPropagateCommand(command);
   }
 
+  @SerializableRecorder.captureMethod()
   public addCommentBox(commentBox: CommentBox): void {
     const currentHighlights = this.jointGraphWrapper.getCurrentHighlights();
     const command: Command = {
@@ -501,19 +508,19 @@ export class WorkflowActionService {
    * @param commentBoxes
    */
 
-  @History.recordEvent()
+  @SerializableRecorder.captureMethod()
   public addOperatorsAndLinks(
     operatorsAndPositions: readonly { op: OperatorPredicate; pos: Point }[],
     links?: readonly OperatorLink[],
     groups?: readonly Group[],
     breakpoints?: ReadonlyMap<string, Breakpoint>,
-    commentBoxes?: ReadonlyArray<CommentBox>
+    commentBoxes?: ReadonlyArray<CommentBox>,
   ): void {
     // remember currently highlighted operators and groups
     const currentHighlights = this.jointGraphWrapper.getCurrentHighlights();
 
     const command: Command = {
-      modifiesWorkflow: true,
+      modifiesWorkflow: false,
       execute: () => {
         // unhighlight previous highlights
         this.jointGraphWrapper.unhighlightElements(currentHighlights);
@@ -579,6 +586,7 @@ export class WorkflowActionService {
     }
   }
 
+  @SerializableRecorder.captureMethod()
   public deleteCommentBox(commentBoxID: string): void {
     const commentBox = this.getTexeraGraph().getCommentBox(commentBoxID);
     const command: Command = {
@@ -591,7 +599,7 @@ export class WorkflowActionService {
       },
     };
     const commandMessage: CommandMessage = { action: "deleteCommentBox", parameters: [commentBoxID], type: "execute" };
-    this.executeStoreAndPropagateCommand(command, commandMessage);
+    this.executeStoreAndPropagateCommand(command);
   }
 
   /**
@@ -599,6 +607,7 @@ export class WorkflowActionService {
    * @param operatorIDs
    * @param linkIDs
    */
+  @SerializableRecorder.captureMethod()
   public deleteOperatorsAndLinks(
     operatorIDs: readonly string[],
     linkIDs: readonly string[],
@@ -720,7 +729,7 @@ export class WorkflowActionService {
       parameters: [operatorIDs, linkIDs],
       type: "execute",
     };
-    this.executeStoreAndPropagateCommand(command, commandMessage);
+    this.executeStoreAndPropagateCommand(command);
   }
 
   /**
@@ -729,6 +738,7 @@ export class WorkflowActionService {
    * @param Workflow
    */
   // Originally: drag Operator
+  @SerializableRecorder.captureMethod()
   public autoLayoutWorkflow(): void {
     // remeber old position
     const operatorPositions: { [key: string]: Point } = {};
@@ -749,7 +759,7 @@ export class WorkflowActionService {
       },
     };
     const commandMessage: CommandMessage = { action: "autoLayoutWorkflow", parameters: [], type: "execute" };
-    this.executeStoreAndPropagateCommand(command, commandMessage);
+    this.executeStoreAndPropagateCommand(command);
   }
 
   /**
@@ -757,6 +767,7 @@ export class WorkflowActionService {
    * Throws an Error if the link ID or the link with same source and target already exists.
    * @param link
    */
+  @SerializableRecorder.captureMethod()
   public addLink(link: OperatorLink): void {
     const command: Command = {
       modifiesWorkflow: true,
@@ -764,7 +775,7 @@ export class WorkflowActionService {
       undo: () => this.deleteLinkWithIDInternal(link.linkID),
     };
     const commandMessage: CommandMessage = { action: "addLink", parameters: [link], type: "execute" };
-    this.executeStoreAndPropagateCommand(command, commandMessage);
+    this.executeStoreAndPropagateCommand(command);
   }
 
   /**
@@ -772,6 +783,7 @@ export class WorkflowActionService {
    * Throws an Error if the linkID doesn't exist in the workflow graph.
    * @param linkID
    */
+  @SerializableRecorder.captureMethod()
   public deleteLinkWithID(linkID: string): void {
     const link = this.getTexeraGraph().getLinkWithID(linkID);
     const layer = this.getJointGraphWrapper().getCellLayer(linkID);
@@ -792,7 +804,7 @@ export class WorkflowActionService {
       },
     };
     const commandMessage: CommandMessage = { action: "deleteLinkWithID", parameters: [linkID], type: "execute" };
-    this.executeStoreAndPropagateCommand(command, commandMessage);
+    this.executeStoreAndPropagateCommand(command);
   }
 
   public deleteLink(source: OperatorPort, target: OperatorPort): void {
@@ -917,7 +929,8 @@ export class WorkflowActionService {
     this.executeStoreAndPropagateCommand(command);
   }
 
-  public setOperatorProperty(operatorID: string, newProperty: object): void {
+  @SerializableRecorder.captureMethod()
+  public setOperatorProperty(operatorID: string, newProperty: JsonObject): void {
     const prevProperty = this.getTexeraGraph().getOperator(operatorID).operatorProperties;
     const group = this.getOperatorGroup().getGroupByOperator(operatorID);
     const command: Command = {
@@ -956,7 +969,7 @@ export class WorkflowActionService {
       parameters: [operatorID, newProperty],
       type: "execute",
     };
-    this.executeStoreAndPropagateCommand(command, commandMessage);
+    this.executeStoreAndPropagateCommand(command);
   }
 
   public changeOperatorPosition(currentHighlighted: string[], offsetX: number, offsetY: number) {
@@ -988,6 +1001,7 @@ export class WorkflowActionService {
   /**
    * set a given link's breakpoint properties to specific values
    */
+   @SerializableRecorder.captureMethod()
   public setLinkBreakpoint(linkID: string, newBreakpoint: Breakpoint | undefined): void {
     if (newBreakpoint == null) newBreakpoint = undefined;
     const prevBreakpoint = this.getTexeraGraph().getLinkBreakpoint(linkID);
@@ -1006,7 +1020,7 @@ export class WorkflowActionService {
       parameters: [linkID, newBreakpoint],
       type: "execute",
     };
-    this.executeStoreAndPropagateCommand(command, commandMessage);
+    this.executeStoreAndPropagateCommand(command);
   }
 
   /**
@@ -1190,6 +1204,7 @@ export class WorkflowActionService {
     return this.tempWorkflow;
   }
 
+  @SerializableRecorder.captureMethod()
   public setOperatorCustomName(operatorId: string, newDisplayName: string, userFriendlyName: string): void {
     const previousDisplayName = this.getTexeraGraph().getOperator(operatorId).customDisplayName;
     const previousName = previousDisplayName === undefined ? userFriendlyName : previousDisplayName;
@@ -1207,9 +1222,10 @@ export class WorkflowActionService {
       parameters: [operatorId, newDisplayName, userFriendlyName],
       type: "execute",
     };
-    this.executeStoreAndPropagateCommand(command, commandMessage);
+    this.executeStoreAndPropagateCommand(command);
   }
 
+  @SerializableRecorder.captureMethod()
   public setWorkflowName(name: string): void {
     const previousName = this.workflowMetadata.name;
     const command: Command = {
@@ -1224,7 +1240,7 @@ export class WorkflowActionService {
       },
     };
     const commandMessage: CommandMessage = { action: "setWorkflowName", parameters: [name], type: "execute" };
-    this.executeStoreAndPropagateCommand(command, commandMessage);
+    this.executeStoreAndPropagateCommand(command);
   }
 
   public resetAsNewWorkflow() {
@@ -1239,6 +1255,7 @@ export class WorkflowActionService {
     this.workflowCollabService.propagateChange(commandMessage);
   }
 
+  @SerializableRecorder.captureMethod()
   public highlightOperators(multiSelect: boolean, ...ops: string[]): void {
     const command: Command = {
       modifiesWorkflow: false,
@@ -1252,18 +1269,20 @@ export class WorkflowActionService {
       parameters: [multiSelect, ...ops],
       type: "execute",
     };
-    this.executeStoreAndPropagateCommand(command, commandMessage);
+    this.executeStoreAndPropagateCommand(command);
   }
 
+  @SerializableRecorder.captureMethod()
   public unhighlightOperators(...ops: string[]): void {
     const command: Command = {
       modifiesWorkflow: false,
       execute: () => this.getJointGraphWrapper().unhighlightOperators(...ops),
     };
     const commandMessage: CommandMessage = { action: "unhighlightOperators", parameters: [...ops], type: "execute" };
-    this.executeStoreAndPropagateCommand(command, commandMessage);
+    this.executeStoreAndPropagateCommand(command);
   }
 
+  @SerializableRecorder.captureMethod()
   public highlightLinks(multiSelect: boolean, ...links: string[]): void {
     const command: Command = {
       modifiesWorkflow: false,
@@ -1277,18 +1296,20 @@ export class WorkflowActionService {
       parameters: [multiSelect, ...links],
       type: "execute",
     };
-    this.executeStoreAndPropagateCommand(command, commandMessage);
+    this.executeStoreAndPropagateCommand(command);
   }
 
+  @SerializableRecorder.captureMethod()
   public unhighlightLinks(...links: string[]): void {
     const command: Command = {
       modifiesWorkflow: false,
       execute: () => this.getJointGraphWrapper().unhighlightLinks(...links),
     };
     const commandMessage: CommandMessage = { action: "unhighlightLinks", parameters: [...links], type: "execute" };
-    this.executeStoreAndPropagateCommand(command, commandMessage);
+    this.executeStoreAndPropagateCommand(command);
   }
 
+  @SerializableRecorder.captureMethod()
   public disableOperators(ops: readonly string[]): void {
     const command: Command = {
       modifiesWorkflow: true,
@@ -1302,9 +1323,10 @@ export class WorkflowActionService {
         }),
     };
     const commandMessage: CommandMessage = { action: "disableOperators", parameters: [ops], type: "execute" };
-    this.executeStoreAndPropagateCommand(command, commandMessage);
+    this.executeStoreAndPropagateCommand(command);
   }
 
+  @SerializableRecorder.captureMethod()
   public enableOperators(ops: readonly string[]): void {
     const command: Command = {
       modifiesWorkflow: true,
@@ -1318,9 +1340,10 @@ export class WorkflowActionService {
         }),
     };
     const commandMessage: CommandMessage = { action: "enableOperators", parameters: [ops], type: "execute" };
-    this.executeStoreAndPropagateCommand(command, commandMessage);
+    this.executeStoreAndPropagateCommand(command);
   }
 
+  @SerializableRecorder.captureMethod()
   public cacheOperators(ops: readonly string[]): void {
     const command: Command = {
       modifiesWorkflow: true,
@@ -1334,9 +1357,10 @@ export class WorkflowActionService {
         }),
     };
     const commandMessage: CommandMessage = { action: "cacheOperators", parameters: [ops], type: "execute" };
-    this.executeStoreAndPropagateCommand(command, commandMessage);
+    this.executeStoreAndPropagateCommand(command);
   }
 
+  @SerializableRecorder.captureMethod()
   public unCacheOperators(ops: readonly string[]): void {
     const command: Command = {
       modifiesWorkflow: true,
@@ -1350,7 +1374,7 @@ export class WorkflowActionService {
         }),
     };
     const commandMessage: CommandMessage = { action: "unCacheOperators", parameters: [ops], type: "execute" };
-    this.executeStoreAndPropagateCommand(command, commandMessage);
+    this.executeStoreAndPropagateCommand(command);
   }
 
   private addCommentBoxInternal(commentBox: CommentBox): void {
@@ -1552,7 +1576,7 @@ export class WorkflowActionService {
   private executeStoreAndPropagateCommand(command: Command, message?: CommandMessage | undefined): void {
     // if command would modify workflow (adding link, operator, changing operator properties), throw an error
     // non-modifying commands include dragging an operator.
-    if (command.modifiesWorkflow && !this.workflowModificationEnabled) {
+    if ( false && command.modifiesWorkflow && !this.workflowModificationEnabled) {
       console.error("attempted to execute workflow action when workflow service is disabled");
       return;
     }
