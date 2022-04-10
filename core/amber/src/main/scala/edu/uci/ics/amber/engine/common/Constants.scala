@@ -44,8 +44,8 @@ object Constants {
   val lowerErrorLimit: Int = 98
 
   var dynamicDistributionExpTrigger = false
-  val multipleHelpers = false
-  val numOfHelpers = 2
+  val multipleHelpers = true
+  val numOfHelpers = 1
 
   type joinType = String
 }
