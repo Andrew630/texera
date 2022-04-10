@@ -12,6 +12,7 @@ import edu.uci.ics.amber.engine.architecture.controller.promisehandlers.DetectSk
   endTimeForNetChange,
   endTimeForNetChangeForSecondPhase,
   firstPhaseIterations,
+  firstTweetHelperWorker,
   getSkewedAndFreeWorkersEligibleForFirstPhase,
   getSkewedAndFreeWorkersEligibleForSecondPhase,
   isfreeGettingSkewed,
@@ -86,7 +87,11 @@ object DetectSkewHandler {
   var workerToTotalLoadHistory: mutable.HashMap[OperatorIdentity, mutable.HashMap[ActorVirtualIdentity, mutable.HashMap[ActorVirtualIdentity, ArrayBuffer[Long]]]] =
     new mutable.HashMap[OperatorIdentity, mutable.HashMap[ActorVirtualIdentity, mutable.HashMap[ActorVirtualIdentity, ArrayBuffer[Long]]]]()
   val historyLimit = 1
-  val tweetSkewedWorkerString = "Layer(1,HashJoinTweets-operator-cd435d3f-714c-4145-b7b9-8500c70c9124,main)"
+
+  // tweet multiple helper exp
+  val tweetSkewedWorkerString = "Layer(1,HashJoinTweets-operator-089d9976-a176-4f9d-bd49-4128c92c9791,main)"
+  val skewedTweetWorker = WorkerActorVirtualIdentity(tweetSkewedWorkerString + "[6]")
+  val firstTweetHelperWorker = WorkerActorVirtualIdentity(tweetSkewedWorkerString + "[14]")
   val tweetHelperWorkerOrder =
     Array(14, 43, 11, 30, 38, 46, 10, 23, 16, 33, 44, 2, 15, 35, 28, 31, 9, 20, 19, 21, 7, 45, 27, 29, 40, 41, 8, 18, 32, 47, 25, 1, 34, 24, 22, 3, 4, 26, 5, 13, 37, 42, 17, 39,
       12, 36, 0, 6)
@@ -207,24 +212,22 @@ object DetectSkewHandler {
     val sortedWorkers = loads.keys.toList.sortBy(loads(_))
 
     if (!Constants.onlyDetectSkew && Constants.multipleHelpers) {
-      val skewed = WorkerActorVirtualIdentity(tweetSkewedWorkerString + "[6]")
-      val helper = WorkerActorVirtualIdentity(tweetSkewedWorkerString + "[3]")
       if (
-        !skewedToFreeWorkerFirstPhase(skewedOpId).keySet.contains(skewed)
-        && passSkewTest(skewed, helper, Constants.threshold, skewedOpId)
+        !skewedToFreeWorkerFirstPhase(skewedOpId).keySet.contains(skewedTweetWorker)
+        && passSkewTest(skewedTweetWorker, firstTweetHelperWorker, Constants.threshold, skewedOpId)
       ) {
-        if (!skewedToFreeWorkerHistory(skewedOpId).contains(skewed)) {
-          ret.append((skewed, helper, true))
-          firstPhaseIterations(skewed) = 1
-          skewedToFreeWorkerHistory(skewedOpId)(skewed) = helper
+        if (!skewedToFreeWorkerHistory(skewedOpId).contains(skewedTweetWorker)) {
+          ret.append((skewedTweetWorker, firstTweetHelperWorker, true))
+          firstPhaseIterations(skewedTweetWorker) = 1
+          skewedToFreeWorkerHistory(skewedOpId)(skewedTweetWorker) = firstTweetHelperWorker
         } else {
-          ret.append((skewed, helper, false))
-          firstPhaseIterations(skewed) += 1
+          ret.append((skewedTweetWorker, firstTweetHelperWorker, false))
+          firstPhaseIterations(skewedTweetWorker) += 1
         }
 
-        skewedToFreeWorkerFirstPhase(skewedOpId)(skewed) = helper
-        skewedToFreeWorkerSecondPhase(skewedOpId).remove(helper) // remove if there
-        skewedToFreeWorkerNetworkRolledBack(skewedOpId).remove(helper)
+        skewedToFreeWorkerFirstPhase(skewedOpId)(skewedTweetWorker) = firstTweetHelperWorker
+        skewedToFreeWorkerSecondPhase(skewedOpId).remove(skewedTweetWorker) // remove if there
+        skewedToFreeWorkerNetworkRolledBack(skewedOpId).remove(skewedTweetWorker)
       }
       return ret
     }
@@ -362,7 +365,7 @@ trait DetectSkewHandler {
         workerLayer.workers.keys.foreach(id => {
           var helpers = new ArrayBuffer[ActorVirtualIdentity]()
           var redirectNumerators = new ArrayBuffer[Long]()
-          helpers.append(WorkerActorVirtualIdentity(tweetSkewedWorkerString + tweetHelperWorkerOrder(0)))
+          helpers.append(firstTweetHelperWorker)
           redirectNumerators.append(Constants.firstPhaseNum)
           for (i <- 1 to Constants.numOfHelpers - 1) {
             helpers.append(WorkerActorVirtualIdentity(tweetSkewedWorkerString + tweetHelperWorkerOrder(i)))
