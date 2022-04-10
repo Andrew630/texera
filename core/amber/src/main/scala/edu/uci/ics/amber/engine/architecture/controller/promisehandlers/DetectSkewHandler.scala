@@ -368,7 +368,7 @@ trait DetectSkewHandler {
           helpers.append(firstTweetHelperWorker)
           redirectNumerators.append(Constants.firstPhaseNum)
           for (i <- 1 to Constants.numOfHelpers - 1) {
-            helpers.append(WorkerActorVirtualIdentity(tweetSkewedWorkerString + tweetHelperWorkerOrder(i)))
+            helpers.append(WorkerActorVirtualIdentity(tweetSkewedWorkerString + "[" + tweetHelperWorkerOrder(i) + "]"))
             redirectNumerators.append(Constants.firstPhaseNum)
           }
           futuresArr.append(
@@ -411,7 +411,7 @@ trait DetectSkewHandler {
         var skewedLoad: Double = AmberUtils.mean(workerToTotalLoadHistory(skewedOpId)(id)(skewedAndFreeWorkersList(0)._1))
         var helpersLoad: Double = 0
         for (i <- 0 to Constants.numOfHelpers - 1) {
-          helpersLoad += AmberUtils.mean(workerToTotalLoadHistory(skewedOpId)(id)(WorkerActorVirtualIdentity(tweetSkewedWorkerString + tweetHelperWorkerOrder(i))))
+          helpersLoad += AmberUtils.mean(workerToTotalLoadHistory(skewedOpId)(id)(WorkerActorVirtualIdentity(tweetSkewedWorkerString + "[" + tweetHelperWorkerOrder(i) + "]")))
         }
         var averageLoad = (skewedLoad + helpersLoad) / (Constants.numOfHelpers + 1)
         println(s"\t\tThe average load for second phase is ${averageLoad.toString()}")
@@ -419,7 +419,7 @@ trait DetectSkewHandler {
         var redirectNums = new ArrayBuffer[Long]()
         var prevRedirectNum: Long = 0L
         for (i <- 0 to Constants.numOfHelpers - 1) {
-          var h = WorkerActorVirtualIdentity(tweetSkewedWorkerString + tweetHelperWorkerOrder(i))
+          var h = WorkerActorVirtualIdentity(tweetSkewedWorkerString + "[" + tweetHelperWorkerOrder(i) + "]")
           allHelpers.append(h)
           var specificHelperLoad = AmberUtils.mean(workerToTotalLoadHistory(skewedOpId)(id)(h))
           var redirectNum = averageLoad - specificHelperLoad
@@ -428,7 +428,7 @@ trait DetectSkewHandler {
           }
           redirectNums.append(redirectNum.toLong + prevRedirectNum)
           prevRedirectNum += redirectNum.toLong + prevRedirectNum
-          workerToTotalLoadHistory(skewedOpId)(id)(WorkerActorVirtualIdentity(tweetSkewedWorkerString + tweetHelperWorkerOrder(i))) = new ArrayBuffer[Long]()
+          workerToTotalLoadHistory(skewedOpId)(id)(WorkerActorVirtualIdentity(tweetSkewedWorkerString + "[" + tweetHelperWorkerOrder(i) + "]")) = new ArrayBuffer[Long]()
         }
         workerToTotalLoadHistory(skewedOpId)(id)(skewedAndFreeWorkersList(0)._1) = new ArrayBuffer[Long]()
         futuresArr.append(
@@ -628,7 +628,7 @@ trait DetectSkewHandler {
                     futuresArr.append(send(SendBuildTable(sf._2), sf._1))
                     if (Constants.multipleHelpers) {
                       for (i <- 1 to Constants.numOfHelpers - 1) {
-                        val helper = WorkerActorVirtualIdentity(tweetSkewedWorkerString + tweetHelperWorkerOrder(i))
+                        val helper = WorkerActorVirtualIdentity(tweetSkewedWorkerString + "[" + tweetHelperWorkerOrder(i) + "]")
                         detectSkewLogger.logInfo(
                           s"\tSkewed Worker:${sf._1}, Free Worker:${helper}, build replication:${sf._3}"
                         )
