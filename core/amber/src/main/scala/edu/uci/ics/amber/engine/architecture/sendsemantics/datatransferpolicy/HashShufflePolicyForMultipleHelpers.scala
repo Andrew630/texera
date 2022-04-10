@@ -77,7 +77,7 @@ class HashShufflePolicyForMultipleHelpers(
       breakable {
         for (i <- 0 to redirectRatio._2.size - 1) {
           if (redirectRatio._1 <= redirectRatio._2(i)) {
-            receiver = receivers(i)
+            receiver = receivers(i + 1)
             break
           }
         }
@@ -111,6 +111,7 @@ class HashShufflePolicyForMultipleHelpers(
       bucketsToReceivers(defaultBucket).appendAll(newRecId)
     }
     bucketsToRedirectRatio(defaultBucket) = (1, tuplesToRedirectNumerator, tuplesToRedirectDenominator)
+    println(s"Adding receivers to bucket ${bucketsToReceivers(defaultBucket).mkString(",")} with ${bucketsToRedirectRatio(defaultBucket)._2.mkString(",")}")
     bucketsToSharingEnabled(defaultBucket) = true
 
   }
