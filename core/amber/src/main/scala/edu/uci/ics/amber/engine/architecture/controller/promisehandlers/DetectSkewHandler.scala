@@ -87,8 +87,9 @@ object DetectSkewHandler {
     new mutable.HashMap[OperatorIdentity, mutable.HashMap[ActorVirtualIdentity, mutable.HashMap[ActorVirtualIdentity, ArrayBuffer[Long]]]]()
   val historyLimit = 1
   val tweetSkewedWorkerString = "Layer(1,HashJoinTweets-operator-cd435d3f-714c-4145-b7b9-8500c70c9124,main)"
-  val tweetHelperWorkerOrder = Array(3, 7, 14, 43, 52, 11, 50, 0, 30, 38, 46, 10, 23, 33, 16, 2, 44, 15, 54, 35, 5, 28, 31, 49, 9, 20, 19, 21, 55, 45, 27, 29, 40, 1, 41, 8, 18, 32,
-    47, 25, 34, 24, 53, 22, 51, 4, 26, 13, 37, 42, 17, 39, 12, 36, 48, 6)
+  val tweetHelperWorkerOrder =
+    Array(14, 43, 11, 30, 38, 46, 10, 23, 16, 33, 44, 2, 15, 35, 28, 31, 9, 20, 19, 21, 7, 45, 27, 29, 40, 41, 8, 18, 32, 47, 25, 1, 34, 24, 22, 3, 4, 26, 5, 13, 37, 42, 17, 39,
+      12, 36, 0, 6)
 
   final case class DetectSkew(joinLayer: WorkerLayer, probeLayer: WorkerLayer) extends ControlCommand[CommandCompleted]
 
