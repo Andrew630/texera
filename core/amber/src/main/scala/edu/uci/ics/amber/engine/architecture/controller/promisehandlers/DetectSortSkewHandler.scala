@@ -284,7 +284,7 @@ trait DetectSortSkewHandler {
     skewedAndFreeWorkersList.foreach(sf => {
       workerLayer.workers.keys.foreach(id => {
         futuresArr.append(
-          send(ShareFlow(sf._1, sf._2, Constants.firstPhaseNum, Constants.firstPhaseDen), id)
+          send(ShareFlow(sf._1, ArrayBuffer[ActorVirtualIdentity](sf._2), ArrayBuffer[Long](Constants.firstPhaseNum), Constants.firstPhaseDen), id)
         )
       })
     })
@@ -337,7 +337,7 @@ trait DetectSortSkewHandler {
 //            s"SECOND PHASE: ${id} - Loads=${skewedLoad}:${freeLoad}; Error=${skewedEstimateError}:${freeEstimateError}; Size=${skewedHistorySize}:${freeHistorySize} - Ratio=${redirectNum}:${skewedLoad.toLong}"
 //          )
           futuresArr.append(
-            send(ShareFlow(sf._1, sf._2, redirectNum, skewedLoad.toLong), id)
+            send(ShareFlow(sf._1, ArrayBuffer[ActorVirtualIdentity](sf._2), ArrayBuffer[Long](redirectNum), skewedLoad.toLong), id)
           )
 
         }

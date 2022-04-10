@@ -36,8 +36,8 @@ abstract class DataSendingPolicy(
 
   def addReceiverToBucket(
       defaultRecId: ActorVirtualIdentity,
-      newRecId: ActorVirtualIdentity,
-      tuplesToRedirectNumerator: Long,
+      newRecIds: ArrayBuffer[ActorVirtualIdentity],
+      tuplesToRedirectNumerators: ArrayBuffer[Long],
       tuplesToRedirectDenominator: Long
   ): Unit
 

@@ -11,6 +11,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.control.Breaks
 
 /** This class is a container of all the transfer policies.
+  *
   * @param selfID
   * @param dataOutputPort
   * @param controlOutputPort
@@ -22,6 +23,7 @@ class TupleToBatchConverter(
   private var policies = new Array[DataSendingPolicy](0)
 
   /** Add down stream operator and its transfer policy
+    *
     * @param policy
     * @param linkTag
     * @param receivers
@@ -65,8 +67,8 @@ class TupleToBatchConverter(
 
   def changeFlow(
       skewedReceiverId: ActorVirtualIdentity,
-      freeReceiverId: ActorVirtualIdentity,
-      tuplesToRedirectNumerator: Long,
+      freeReceiverId: ArrayBuffer[ActorVirtualIdentity],
+      tuplesToRedirectNumerator: ArrayBuffer[Long],
       tuplesToRedirectDenominator: Long
   ): Unit = {
     if (Constants.dynamicDistributionFluxExp) {
@@ -97,6 +99,7 @@ class TupleToBatchConverter(
 
   /** Push one tuple to the downstream, will be batched by each transfer policy.
     * Should ONLY be called by DataProcessor.
+    *
     * @param tuple
     */
   def passTupleToDownstream(tuple: ITuple): Unit = {

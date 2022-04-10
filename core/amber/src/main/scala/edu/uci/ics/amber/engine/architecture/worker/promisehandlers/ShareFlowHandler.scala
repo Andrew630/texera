@@ -8,12 +8,14 @@ import edu.uci.ics.amber.engine.architecture.worker.promisehandlers.ShareFlowHan
 import edu.uci.ics.amber.engine.common.rpc.AsyncRPCServer.ControlCommand
 import edu.uci.ics.amber.engine.common.virtualidentity.ActorVirtualIdentity
 
+import scala.collection.mutable.ArrayBuffer
+
 // join-skew research related.
 object ShareFlowHandler {
   final case class ShareFlow(
       skewedReceiverId: ActorVirtualIdentity,
-      freeReceiverId: ActorVirtualIdentity,
-      tuplesToRedirectNumerator: Long,
+      freeReceiverId: ArrayBuffer[ActorVirtualIdentity],
+      tuplesToRedirectNumerator: ArrayBuffer[Long],
       tuplesToRedirectDenominator: Long
   ) extends ControlCommand[Unit]
 }

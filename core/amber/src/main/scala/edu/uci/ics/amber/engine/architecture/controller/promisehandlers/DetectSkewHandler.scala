@@ -28,6 +28,8 @@ import edu.uci.ics.amber.engine.architecture.controller.promisehandlers.DetectSk
   startTimeForNetChangeForSecondPhase,
   startTimeForNetRollback,
   stopMitigationCallFinished,
+  tweetHelperWorkerOrder,
+  tweetSkewedWorkerString,
   workerToLoadHistory,
   workerToTotalLoadHistory
 }
@@ -41,7 +43,7 @@ import edu.uci.ics.amber.engine.common.AmberUtils.sampleMeanError
 import edu.uci.ics.amber.engine.common.{AmberUtils, Constants, WorkflowLogger}
 import edu.uci.ics.amber.engine.common.rpc.AsyncRPCServer.{CommandCompleted, ControlCommand}
 import edu.uci.ics.amber.engine.common.statetransition.WorkerStateManager
-import edu.uci.ics.amber.engine.common.virtualidentity.ActorVirtualIdentity.WorkerActorVirtualIdentity
+import edu.uci.ics.amber.engine.common.virtualidentity.ActorVirtualIdentity.{Controller, WorkerActorVirtualIdentity}
 import edu.uci.ics.amber.engine.common.virtualidentity.{ActorVirtualIdentity, LinkIdentity, OperatorIdentity}
 
 import scala.collection.immutable.ListMap
@@ -84,6 +86,9 @@ object DetectSkewHandler {
   var workerToTotalLoadHistory: mutable.HashMap[OperatorIdentity, mutable.HashMap[ActorVirtualIdentity, mutable.HashMap[ActorVirtualIdentity, ArrayBuffer[Long]]]] =
     new mutable.HashMap[OperatorIdentity, mutable.HashMap[ActorVirtualIdentity, mutable.HashMap[ActorVirtualIdentity, ArrayBuffer[Long]]]]()
   val historyLimit = 1
+  val tweetSkewedWorkerString = "Layer(1,HashJoinTweets-operator-cd435d3f-714c-4145-b7b9-8500c70c9124,main)"
+  val tweetHelperWorkerOrder = Array(3, 7, 14, 43, 52, 11, 50, 0, 30, 38, 46, 10, 23, 33, 16, 2, 44, 15, 54, 35, 5, 28, 31, 49, 9, 20, 19, 21, 55, 45, 27, 29, 40, 1, 41, 8, 18, 32,
+    47, 25, 34, 24, 53, 22, 51, 4, 26, 13, 37, 42, 17, 39, 12, 36, 48, 6)
 
   final case class DetectSkew(joinLayer: WorkerLayer, probeLayer: WorkerLayer) extends ControlCommand[CommandCompleted]
 
@@ -199,6 +204,29 @@ object DetectSkewHandler {
     val ret = new ArrayBuffer[(ActorVirtualIdentity, ActorVirtualIdentity, Boolean)]()
     // Get workers in increasing load
     val sortedWorkers = loads.keys.toList.sortBy(loads(_))
+
+    if (!Constants.onlyDetectSkew && Constants.multipleHelpers) {
+      val skewed = WorkerActorVirtualIdentity(tweetSkewedWorkerString + "[6]")
+      val helper = WorkerActorVirtualIdentity(tweetSkewedWorkerString + "[3]")
+      if (
+        !skewedToFreeWorkerFirstPhase(skewedOpId).keySet.contains(skewed)
+        && passSkewTest(skewed, helper, Constants.threshold, skewedOpId)
+      ) {
+        if (!skewedToFreeWorkerHistory(skewedOpId).contains(skewed)) {
+          ret.append((skewed, helper, true))
+          firstPhaseIterations(skewed) = 1
+          skewedToFreeWorkerHistory(skewedOpId)(skewed) = helper
+        } else {
+          ret.append((skewed, helper, false))
+          firstPhaseIterations(skewed) += 1
+        }
+
+        skewedToFreeWorkerFirstPhase(skewedOpId)(skewed) = helper
+        skewedToFreeWorkerSecondPhase(skewedOpId).remove(helper) // remove if there
+        skewedToFreeWorkerNetworkRolledBack(skewedOpId).remove(helper)
+      }
+      return ret
+    }
 
     if (Constants.dynamicThreshold) {
       if (maxError < Constants.lowerErrorLimit && maxError != Double.MinValue) {
@@ -328,13 +356,31 @@ trait DetectSkewHandler {
       skewedAndFreeWorkersList: ArrayBuffer[(ActorVirtualIdentity, ActorVirtualIdentity, Boolean)]
   ): Future[Seq[Unit]] = {
     val futuresArr = new ArrayBuffer[Future[Unit]]()
-    skewedAndFreeWorkersList.foreach(sf => {
-      workerLayer.workers.keys.foreach(id => {
-        futuresArr.append(
-          send(ShareFlow(sf._1, sf._2, Constants.firstPhaseNum, Constants.firstPhaseDen), id)
-        )
+    if (Constants.multipleHelpers) {
+      skewedAndFreeWorkersList.foreach(sf => {
+        workerLayer.workers.keys.foreach(id => {
+          var helpers = new ArrayBuffer[ActorVirtualIdentity]()
+          var redirectNumerators = new ArrayBuffer[Long]()
+          helpers.append(WorkerActorVirtualIdentity(tweetSkewedWorkerString + tweetHelperWorkerOrder(0)))
+          redirectNumerators.append(Constants.firstPhaseNum)
+          for (i <- 1 to Constants.numOfHelpers - 1) {
+            helpers.append(WorkerActorVirtualIdentity(tweetSkewedWorkerString + tweetHelperWorkerOrder(i)))
+            redirectNumerators.append(Constants.firstPhaseNum)
+          }
+          futuresArr.append(
+            send(ShareFlow(sf._1, helpers, redirectNumerators, Constants.firstPhaseDen), id)
+          )
+        })
       })
-    })
+    } else {
+      skewedAndFreeWorkersList.foreach(sf => {
+        workerLayer.workers.keys.foreach(id => {
+          futuresArr.append(
+            send(ShareFlow(sf._1, ArrayBuffer[ActorVirtualIdentity](sf._2), ArrayBuffer[Long](Constants.firstPhaseNum), Constants.firstPhaseDen), id)
+          )
+        })
+      })
+    }
     if (Constants.dynamicThreshold) {
       if (maxError > Constants.upperErrorLimit && Constants.threshold < 150 && maxError != Double.MaxValue) {
         Constants.threshold = Constants.threshold + Constants.fixedThresholdIncrease
@@ -356,6 +402,41 @@ trait DetectSkewHandler {
   ): Future[Seq[Unit]] = {
     val futuresArr = new ArrayBuffer[Future[Unit]]()
     var maxErrorAtSecondPhaseStart = Double.MinValue
+    if (!Constants.onlyDetectSkew && Constants.multipleHelpers && skewedAndFreeWorkersList.size > 0) {
+      workerLayer.workers.keys.foreach(id => {
+        var skewedLoad: Double = AmberUtils.mean(workerToTotalLoadHistory(skewedOpId)(id)(skewedAndFreeWorkersList(0)._1))
+        var helpersLoad: Double = 0
+        for (i <- 0 to Constants.numOfHelpers - 1) {
+          helpersLoad += AmberUtils.mean(workerToTotalLoadHistory(skewedOpId)(id)(WorkerActorVirtualIdentity(tweetSkewedWorkerString + tweetHelperWorkerOrder(i))))
+        }
+        var averageLoad = (skewedLoad + helpersLoad) / (Constants.numOfHelpers + 1)
+        println(s"\t\tThe average load for second phase is ${averageLoad.toString()}")
+        var allHelpers = new ArrayBuffer[ActorVirtualIdentity]()
+        var redirectNums = new ArrayBuffer[Long]()
+        var prevRedirectNum: Long = 0L
+        for (i <- 0 to Constants.numOfHelpers - 1) {
+          var h = WorkerActorVirtualIdentity(tweetSkewedWorkerString + tweetHelperWorkerOrder(i))
+          allHelpers.append(h)
+          var specificHelperLoad = AmberUtils.mean(workerToTotalLoadHistory(skewedOpId)(id)(h))
+          var redirectNum = averageLoad - specificHelperLoad
+          if (redirectNum > skewedLoad) {
+            redirectNum = 0
+          }
+          redirectNums.append(redirectNum.toLong + prevRedirectNum)
+          prevRedirectNum += redirectNum.toLong + prevRedirectNum
+          workerToTotalLoadHistory(skewedOpId)(id)(WorkerActorVirtualIdentity(tweetSkewedWorkerString + tweetHelperWorkerOrder(i))) = new ArrayBuffer[Long]()
+        }
+        workerToTotalLoadHistory(skewedOpId)(id)(skewedAndFreeWorkersList(0)._1) = new ArrayBuffer[Long]()
+        futuresArr.append(
+          send(
+            ShareFlow(skewedAndFreeWorkersList(0)._1, allHelpers, redirectNums, skewedLoad.toLong),
+            id
+          )
+        )
+      })
+      return Future.collect(futuresArr)
+    }
+
     skewedAndFreeWorkersList.foreach(sf => {
       workerLayer.workers.keys.foreach(id => {
         if (
@@ -390,7 +471,7 @@ trait DetectSkewHandler {
           //            s"SECOND PHASE: ${id} - Loads=${skewedLoad}:${freeLoad}; Error=${skewedEstimateError}:${freeEstimateError}; Size=${skewedHistorySize}:${freeHistorySize} - Ratio=${redirectNum}:${skewedLoad.toLong}"
           //          )
           futuresArr.append(
-            send(ShareFlow(sf._1, sf._2, redirectNum, skewedLoad.toLong), id)
+            send(ShareFlow(sf._1, ArrayBuffer[ActorVirtualIdentity](sf._2), ArrayBuffer[Long](redirectNum), skewedLoad.toLong), id)
             // send(ShareFlow(sf._1, sf._2, 1, 2), id)
           )
 
@@ -412,6 +493,7 @@ trait DetectSkewHandler {
       actualSkewedAndFreeWorkersList: ArrayBuffer[(ActorVirtualIdentity, ActorVirtualIdentity)]
   ): Future[Seq[Unit]] = {
     val futuresArr = new ArrayBuffer[Future[Unit]]()
+
     actualSkewedAndFreeWorkersList.foreach(sf => {
       workerLayer.workers.keys.foreach(id => {
         futuresArr.append(send(RollbackFlow(sf._1, sf._2), id))
@@ -487,23 +569,6 @@ trait DetectSkewHandler {
     loads
   }
 
-  /**
-    * Prints the total # of tuples sent to workers in the skewed operator till now.
-    *
-    * @param totalSentPerSender
-    */
-  private def aggregateAndPrintSentCount(
-      totalSentPerSender: Seq[Map[ActorVirtualIdentity, Long]]
-  ): Unit = {
-    val aggregatedSentCount = new mutable.HashMap[ActorVirtualIdentity, Long]()
-    totalSentPerSender.foreach(senderCount => {
-      for ((rec, count) <- senderCount) {
-        aggregatedSentCount(rec) = aggregatedSentCount.getOrElse(rec, 0L) + count
-      }
-    })
-    // detectSkewLogger.logInfo(s"\tTOTAL SENT TILL NOW ${aggregatedSentCount.mkString("\n\t\t")}")
-  }
-
   registerHandler { (cmd: DetectSkew, sender) =>
     {
       val skewedOpId = cmd.joinLayer.id.toOperatorIdentity
@@ -557,6 +622,15 @@ trait DetectSkewHandler {
                   )
                   if (sf._3) {
                     futuresArr.append(send(SendBuildTable(sf._2), sf._1))
+                    if (Constants.multipleHelpers) {
+                      for (i <- 1 to Constants.numOfHelpers - 1) {
+                        val helper = WorkerActorVirtualIdentity(tweetSkewedWorkerString + tweetHelperWorkerOrder(i))
+                        detectSkewLogger.logInfo(
+                          s"\tSkewed Worker:${sf._1}, Free Worker:${helper}, build replication:${sf._3}"
+                        )
+                        futuresArr.append(send(SendBuildTable(helper), sf._1))
+                      }
+                    }
                   }
                 })
                 Future

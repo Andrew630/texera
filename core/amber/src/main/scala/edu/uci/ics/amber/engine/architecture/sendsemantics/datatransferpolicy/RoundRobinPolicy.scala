@@ -24,8 +24,8 @@ class RoundRobinPolicy(
 
   override def addReceiverToBucket(
       defaultRecId: ActorVirtualIdentity,
-      newRecId: ActorVirtualIdentity,
-      tuplesToRedirectNumerator: Long,
+      newRecId: ArrayBuffer[ActorVirtualIdentity],
+      tuplesToRedirectNumerator: ArrayBuffer[Long],
       tuplesToRedirectDenominator: Long
   ): Unit = {
     println(

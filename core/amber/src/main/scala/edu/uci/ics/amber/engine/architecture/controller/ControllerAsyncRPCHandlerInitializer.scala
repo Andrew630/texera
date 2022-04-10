@@ -94,7 +94,7 @@ class ControllerAsyncRPCHandlerInitializer(
 
   // related to join-skew research
   def enableDetectSkewCalls(joinLayer: WorkerLayer, probeLayer: WorkerLayer): Unit = {
-    if (detectSkewHandle.contains(joinLayer.id.toOperatorIdentity)) {
+    if (!detectSkewHandle.contains(joinLayer.id.toOperatorIdentity)) {
       detectSkewHandle(joinLayer.id.toOperatorIdentity) = actorContext.system.scheduler.schedule(
         Constants.startDetection,
         Constants.detectionPeriod,

@@ -3,15 +3,17 @@ package edu.uci.ics.amber.engine.architecture.sendsemantics.datatransferpolicy
 import edu.uci.ics.amber.engine.common.Constants
 import edu.uci.ics.amber.engine.common.ambermessage.{DataFrame, DataPayload, EndOfUpstream}
 import edu.uci.ics.amber.engine.common.tuple.ITuple
-import edu.uci.ics.amber.engine.common.virtualidentity.ActorVirtualIdentity.WorkerActorVirtualIdentity
 import edu.uci.ics.amber.engine.common.virtualidentity.{ActorVirtualIdentity, LinkIdentity}
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.util.control.Breaks.{break, breakable}
 
-abstract class ParallelBatchingPolicy(
+class HashShufflePolicyForMultipleHelpers(
     policyTag: LinkIdentity,
     batchSize: Int,
+    val hashFunc: ITuple => Int,
+    val shuffleKey: ITuple => String,
     receivers: Array[ActorVirtualIdentity]
 ) extends DataSendingPolicy(policyTag, batchSize, receivers) {
 
@@ -19,7 +21,7 @@ abstract class ParallelBatchingPolicy(
   // buckets once decided will remain same because we are not changing the number of workers in Join
   var bucketsToReceivers = new mutable.HashMap[Int, ArrayBuffer[ActorVirtualIdentity]]()
   var bucketsToRedirectRatio =
-    new mutable.HashMap[Int, (Long, Long, Long)]() // bucket to (tuples idx, numerator, denominator)
+    new mutable.HashMap[Int, (Long, ArrayBuffer[Long], Long)]() // bucket to (tuples idx, numerator, denominator)
   var bucketsToSharingEnabled = new mutable.HashMap[Int, Boolean]()
   var originalReceiverToHistory = new mutable.HashMap[ActorVirtualIdentity, ArrayBuffer[Long]]()
   var tupleIndexForHistory = 0
@@ -29,7 +31,15 @@ abstract class ParallelBatchingPolicy(
 
   initializeInternalState(receivers)
 
-  def selectBatchingIndex(tuple: ITuple): Int
+  var fluxChangeReceived: Boolean = false
+
+  override def fluxExpMsgReceived(): Unit = {
+    fluxChangeReceived = true
+  }
+
+  def selectBatchingIndex(tuple: ITuple): Int = {
+    (hashFunc(tuple) % numBuckets + numBuckets) % numBuckets
+  }
 
   override def noMore(): Array[(ActorVirtualIdentity, DataPayload)] = {
     println(
@@ -47,7 +57,9 @@ abstract class ParallelBatchingPolicy(
     receiversAndBatches.toArray
   }
 
-  override def getTotalSentCount(): mutable.HashMap[ActorVirtualIdentity, Long] = { receiverToTotalSent }
+  override def getTotalSentCount(): mutable.HashMap[ActorVirtualIdentity, Long] = {
+    receiverToTotalSent
+  }
 
   // for non-heavy hitters get the default receiver
   def getDefaultReceiverForBucket(bucket: Int): ActorVirtualIdentity =
@@ -59,11 +71,17 @@ abstract class ParallelBatchingPolicy(
 
     // logic below is written in this way to avoid race condition on bucketsToReceivers map
     val receivers = bucketsToReceivers(bucket)
-    var redirectRatio: (Long, Long, Long) = bucketsToRedirectRatio.getOrElse(bucket, (0L, 0L, 0L))
-    if (receivers.size > 1 && bucketsToRedirectRatio.contains(bucket) && redirectRatio._1 <= redirectRatio._2) {
-      receiver = receivers(1)
-    } else {
-      receiver = receivers(0)
+    var redirectRatio: (Long, ArrayBuffer[Long], Long) = bucketsToRedirectRatio.getOrElse(bucket, (0L, ArrayBuffer[Long](0L), 0L))
+
+    if (receivers.size > 1 && bucketsToRedirectRatio.contains(bucket)) {
+      breakable {
+        for (i <- 0 to redirectRatio._2.size - 1) {
+          if (redirectRatio._1 <= redirectRatio._2(i)) {
+            receiver = receivers(i)
+            break
+          }
+        }
+      }
     }
 
     // logic below is written in this way to avoid race condition on bucketsToRedirectRatio map
@@ -84,20 +102,17 @@ abstract class ParallelBatchingPolicy(
   ): Unit = {
     var defaultBucket: Int = -1
     bucketsToReceivers.keys.foreach(b => {
-      if (bucketsToReceivers(b)(0) == defaultRecId) { defaultBucket = b }
+      if (bucketsToReceivers(b)(0) == defaultRecId) {
+        defaultBucket = b
+      }
     })
     assert(defaultBucket != -1)
-    println(
-      s"\tAdd receiver to bucket received. Already sent out ${defaultRecId}:${receiverToTotalSent.getOrElse(
-        defaultRecId,
-        0
-      )};;;${newRecId(0)}:${receiverToTotalSent.getOrElse(newRecId(0), 0)}"
-    )
-    if (!bucketsToReceivers(defaultBucket).contains(newRecId(0))) {
-      bucketsToReceivers(defaultBucket).append(newRecId(0))
+    if (bucketsToReceivers(defaultBucket).size == 1) {
+      bucketsToReceivers(defaultBucket).appendAll(newRecId)
     }
+    bucketsToRedirectRatio(defaultBucket) = (1, tuplesToRedirectNumerator, tuplesToRedirectDenominator)
     bucketsToSharingEnabled(defaultBucket) = true
-    bucketsToRedirectRatio(defaultBucket) = (1, tuplesToRedirectNumerator(0), tuplesToRedirectDenominator)
+
   }
 
   override def removeReceiverFromBucket(
@@ -106,22 +121,12 @@ abstract class ParallelBatchingPolicy(
   ): Unit = {
     var defaultBucket: Int = -1
     bucketsToReceivers.keys.foreach(b => {
-      if (bucketsToReceivers(b)(0) == defaultRecId) { defaultBucket = b }
+      if (bucketsToReceivers(b)(0) == defaultRecId) {
+        defaultBucket = b
+      }
     })
     assert(defaultBucket != -1)
     bucketsToSharingEnabled(defaultBucket) = false
-    //    var idxToRemove = -1
-    //    for (i <- 0 to bucketsToReceivers(defaultBucket).size - 1) {
-    //      if (bucketsToReceivers(defaultBucket)(i) == recIdToRemove) { idxToRemove = i }
-    //    }
-    //    assert(idxToRemove != -1)
-    //    println(
-    //      s"\tRemove receiver from bucket received. Already sent out ${defaultRecId}:${receiverToTotalSent.getOrElse(
-    //        defaultRecId,
-    //        0
-    //      )};;;${recIdToRemove}:${receiverToTotalSent.getOrElse(recIdToRemove, 0)}"
-    //    )
-    //    bucketsToReceivers(defaultBucket).remove(idxToRemove)
   }
 
   override def getWorkloadHistory(): mutable.HashMap[ActorVirtualIdentity, ArrayBuffer[Long]] = {
