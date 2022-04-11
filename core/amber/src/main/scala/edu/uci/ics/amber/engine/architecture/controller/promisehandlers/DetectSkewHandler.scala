@@ -427,6 +427,11 @@ trait DetectSkewHandler {
             redirectNum = 0
           }
           redirectNums.append(redirectNum.toLong + prevRedirectNum)
+          if (id.toString().contains("[4]")) {
+            println(
+              s"Specific helper load ${specificHelperLoad}, increased numerator ${redirectNum.toLong + prevRedirectNum}, average load ${averageLoad}, skewedLoad ${skewedLoad}"
+            )
+          }
           prevRedirectNum += redirectNum.toLong + prevRedirectNum
           workerToTotalLoadHistory(skewedOpId)(id)(WorkerActorVirtualIdentity(tweetSkewedWorkerString + "[" + tweetHelperWorkerOrder(i) + "]")) = new ArrayBuffer[Long]()
         }
@@ -437,7 +442,9 @@ trait DetectSkewHandler {
             id
           )
         )
-        println(s"\t\tSecond phase redirections - ${redirectNums.mkString(",")}::${skewedLoad.toLong}")
+        if (id.toString().contains("[4]")) {
+          println(s"\t\tSecond phase redirections - ${redirectNums.mkString(",")}::${skewedLoad.toLong}")
+        }
       })
       return Future.collect(futuresArr)
     }
