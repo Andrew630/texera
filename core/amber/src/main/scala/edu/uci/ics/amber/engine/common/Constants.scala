@@ -17,7 +17,7 @@ object Constants {
   // join-skew reserach related
   val gcpExp: Boolean = true
   val samplingResetFrequency: Int = 2000
-  val startDetection: FiniteDuration = 2.seconds // 100.milliseconds
+  val startDetection: FiniteDuration = 2.seconds // 100.milliseconds // 2.seconds
   val detectionPeriod: FiniteDuration = 2.seconds
   val printResultsInConsole: Boolean = true
 
@@ -45,7 +45,7 @@ object Constants {
 
   var dynamicDistributionExpTrigger = false
   val multipleHelpers = true
-  val numOfHelpers = 2
+  val numOfHelpers = 5
 
   type joinType = String
 }

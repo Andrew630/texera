@@ -414,7 +414,7 @@ trait DetectSkewHandler {
           helpersLoad += AmberUtils.mean(workerToTotalLoadHistory(skewedOpId)(id)(WorkerActorVirtualIdentity(tweetSkewedWorkerString + "[" + tweetHelperWorkerOrder(i) + "]")))
         }
         var averageLoad = (skewedLoad + helpersLoad) / (Constants.numOfHelpers + 1)
-        println(s"\t\tThe average load for second phase is ${averageLoad.toString()}")
+        // println(s"\t\tThe average load for second phase is ${averageLoad.toString()}")
         var allHelpers = new ArrayBuffer[ActorVirtualIdentity]()
         var redirectNums = new ArrayBuffer[Long]()
         var prevRedirectNum: Long = 0L
@@ -437,6 +437,7 @@ trait DetectSkewHandler {
             id
           )
         )
+        println(s"\t\tSecond phase redirections - ${redirectNums.mkString(",")}::${skewedLoad.toLong}")
       })
       return Future.collect(futuresArr)
     }
@@ -517,13 +518,13 @@ trait DetectSkewHandler {
       //        s"\tLOAD ${id} - ${currLoad.stashedBatches} stashed batches, ${currLoad.unprocessedQueueLength} internal queue, ${currLoad.totalPutInInternalQueue} total input"
       //      )
     }
-//    metrics._2.foreach(replyFromNetComm => {
-//      for ((wId, futLoad) <- replyFromNetComm._1.dataToSend) {
-//        if (loads.contains(wId)) {
-//          loads(wId) = loads.getOrElse(wId, 0L) + futLoad
-//        }
-//      }
-//    })
+    //    metrics._2.foreach(replyFromNetComm => {
+    //      for ((wId, futLoad) <- replyFromNetComm._1.dataToSend) {
+    //        if (loads.contains(wId)) {
+    //          loads(wId) = loads.getOrElse(wId, 0L) + futLoad
+    //        }
+    //      }
+    //    })
 
     val aggregatedSentCount = new mutable.HashMap[ActorVirtualIdentity, Long]()
     metrics._2.foreach(prevReply => {
