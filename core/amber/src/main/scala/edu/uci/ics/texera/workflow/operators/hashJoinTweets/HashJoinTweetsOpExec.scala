@@ -122,6 +122,10 @@ class HashJoinTweetsOpExec[K](
       case Right(_) =>
         if (input == buildTable) {
           isBuildTableFinished = true
+          for (i <- 100 to 10000) {
+            val t = buildTableHashMap.get("4".asInstanceOf[K]).get(0)
+            buildTableHashMap(i.toString().asInstanceOf[K]) = ArrayBuffer[Tuple](t)
+          }
 //          if (buildTableHashMap.keySet.size < 13) {
 //            println(
 //              s"\tKeys in build table are: ${buildTableHashMap.keySet.mkString(", ")}"
