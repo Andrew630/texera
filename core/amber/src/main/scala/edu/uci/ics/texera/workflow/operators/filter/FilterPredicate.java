@@ -75,7 +75,7 @@ public class FilterPredicate {
         if (value == null) {
             return compareToValue == null;
         }
-        List<String> slangs = Arrays.asList("112", "34", "432", "322", "3434", "22223", "232");
+        List<String> slangs = Arrays.asList("112", "34", "432", "322", "3434", "22223", "232", "112", "34", "432", "322", "3434", "22223", "232");
         int found = 0;
         for (int i = 0; i < slangs.size() - 1; i++) {
             if (slangs.get(i).contains(value.toString())) {
