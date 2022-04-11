@@ -525,13 +525,13 @@ trait DetectSkewHandler {
       //        s"\tLOAD ${id} - ${currLoad.stashedBatches} stashed batches, ${currLoad.unprocessedQueueLength} internal queue, ${currLoad.totalPutInInternalQueue} total input"
       //      )
     }
-    //    metrics._2.foreach(replyFromNetComm => {
-    //      for ((wId, futLoad) <- replyFromNetComm._1.dataToSend) {
-    //        if (loads.contains(wId)) {
-    //          loads(wId) = loads.getOrElse(wId, 0L) + futLoad
-    //        }
-    //      }
-    //    })
+    metrics._2.foreach(replyFromNetComm => {
+      for ((wId, futLoad) <- replyFromNetComm._1.dataToSend) {
+        if (loads.contains(wId)) {
+          loads(wId) = loads.getOrElse(wId, 0L) + futLoad
+        }
+      }
+    })
 
     val aggregatedSentCount = new mutable.HashMap[ActorVirtualIdentity, Long]()
     metrics._2.foreach(prevReply => {
@@ -695,7 +695,10 @@ trait DetectSkewHandler {
               }
 
               // stop mitigation for worker pairs where mitigation is causing free worker to become skewed
-              val actualSkewedAndFreeGettingSkewedWorkers = isfreeGettingSkewed(loads, skewedOpId)
+              var actualSkewedAndFreeGettingSkewedWorkers = isfreeGettingSkewed(loads, skewedOpId)
+              if (Constants.multipleHelpers) {
+                actualSkewedAndFreeGettingSkewedWorkers = new ArrayBuffer[(ActorVirtualIdentity, ActorVirtualIdentity)]()
+              }
               if (actualSkewedAndFreeGettingSkewedWorkers.size > 0) {
                 stopMitigationCallFinished(skewedOpId) = false
                 actualSkewedAndFreeGettingSkewedWorkers.foreach(sf =>
