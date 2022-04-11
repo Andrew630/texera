@@ -89,7 +89,7 @@ object DetectSkewHandler {
   val historyLimit = 1
 
   // tweet multiple helper exp
-  val tweetSkewedWorkerString = "Layer(1,HashJoinTweets-operator-089d9976-a176-4f9d-bd49-4128c92c9791,main)"
+  val tweetSkewedWorkerString = "Layer(1,HashJoinTweets-operator-51ed9528-4bc3-4cd1-b37b-241d3b650614,main)"
   val skewedTweetWorker = WorkerActorVirtualIdentity(tweetSkewedWorkerString + "[6]")
   val firstTweetHelperWorker = WorkerActorVirtualIdentity(tweetSkewedWorkerString + "[14]")
   val tweetHelperWorkerOrder =
