@@ -71,9 +71,10 @@ class HashShufflePolicyForMultipleHelpers(
 
     // logic below is written in this way to avoid race condition on bucketsToReceivers map
     val receivers = bucketsToReceivers(bucket)
+    println(s"Getting receivers to bucket ${bucketsToReceivers(bucket).mkString(",")} with ${bucketsToRedirectRatio(bucket)._2.mkString(",")}")
     var redirectRatio: (Long, ArrayBuffer[Long], Long) = bucketsToRedirectRatio.getOrElse(bucket, (0L, ArrayBuffer[Long](0L), 0L))
 
-    if (receivers.size > 1 && bucketsToRedirectRatio.contains(bucket)) {
+    if (receivers.size > 1) {
       breakable {
         for (i <- 0 to redirectRatio._2.size - 1) {
           if (redirectRatio._1 <= redirectRatio._2(i)) {
@@ -81,6 +82,9 @@ class HashShufflePolicyForMultipleHelpers(
             break
           }
         }
+      }
+      if (receiver == null) {
+        receiver = receivers(0)
       }
     }
 
@@ -111,7 +115,6 @@ class HashShufflePolicyForMultipleHelpers(
       bucketsToReceivers(defaultBucket).appendAll(newRecId)
     }
     bucketsToRedirectRatio(defaultBucket) = (1, tuplesToRedirectNumerator, tuplesToRedirectDenominator)
-    println(s"Adding receivers to bucket ${bucketsToReceivers(defaultBucket).mkString(",")} with ${bucketsToRedirectRatio(defaultBucket)._2.mkString(",")}")
     bucketsToSharingEnabled(defaultBucket) = true
 
   }
