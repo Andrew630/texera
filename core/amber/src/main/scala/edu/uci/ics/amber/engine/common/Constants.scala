@@ -17,7 +17,7 @@ object Constants {
   // join-skew reserach related
   val gcpExp: Boolean = true
   val samplingResetFrequency: Int = 2000
-  val startDetection: FiniteDuration = 2.seconds // 100.milliseconds // 2.seconds
+  val startDetection: FiniteDuration = 100.milliseconds // 100.milliseconds // 2.seconds
   val detectionPeriod: FiniteDuration = 2.seconds
   val printResultsInConsole: Boolean = true
 

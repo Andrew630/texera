@@ -366,10 +366,10 @@ trait DetectSkewHandler {
           var helpers = new ArrayBuffer[ActorVirtualIdentity]()
           var redirectNumerators = new ArrayBuffer[Long]()
           helpers.append(firstTweetHelperWorker)
-          redirectNumerators.append(Constants.firstPhaseNum)
+          redirectNumerators.append((Constants.firstPhaseNum / Constants.numOfHelpers).toLong)
           for (i <- 1 to Constants.numOfHelpers - 1) {
             helpers.append(WorkerActorVirtualIdentity(tweetSkewedWorkerString + "[" + tweetHelperWorkerOrder(i) + "]"))
-            redirectNumerators.append(Constants.firstPhaseNum)
+            redirectNumerators.append((Constants.firstPhaseNum / Constants.numOfHelpers).toLong * (i + 1))
           }
           futuresArr.append(
             send(ShareFlow(sf._1, helpers, redirectNumerators, Constants.firstPhaseDen), id)
