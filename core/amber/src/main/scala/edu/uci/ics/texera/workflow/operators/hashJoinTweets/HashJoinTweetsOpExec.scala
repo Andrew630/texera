@@ -5,6 +5,7 @@ import edu.uci.ics.amber.engine.common.amberexception.WorkflowRuntimeException
 import edu.uci.ics.amber.engine.common.virtualidentity.LinkIdentity
 import edu.uci.ics.amber.error.WorkflowRuntimeError
 import edu.uci.ics.texera.workflow.common.tuple.Tuple
+import edu.uci.ics.texera.workflow.common.tuple.schema.{Attribute, AttributeType, Schema}
 import edu.uci.ics.texera.workflow.operators.hashJoin.HashJoinOpExec
 
 import scala.collection.mutable
@@ -19,6 +20,7 @@ class HashJoinTweetsOpExec[K](
 ) extends HashJoinOpExec[K](buildTable, buildAttributeName, probeAttributeName) {
 
   var slangsHashMap: mutable.HashMap[K, ArrayBuffer[String]] = _
+  var exampleTuple: Tuple = null
 
   override def addToHashTable(additionalTable: mutable.HashMap[K, ArrayBuffer[Tuple]]): Unit = {
     for ((key, tuples) <- additionalTable) {
@@ -41,6 +43,9 @@ class HashJoinTweetsOpExec[K](
   ): Iterator[Tuple] = {
     tuple match {
       case Left(t) =>
+        if (exampleTuple == null) {
+          exampleTuple = t
+        }
         // The operatorInfo() in HashJoinOpDesc has a inputPorts list. In that the
         // small input port comes first. So, it is assigned the inputNum 0. Similarly
         // the large input is assigned the inputNum 1.
@@ -123,8 +128,7 @@ class HashJoinTweetsOpExec[K](
         if (input == buildTable) {
           isBuildTableFinished = true
           for (i <- 100 to 10000) {
-            val t = buildTableHashMap.get("4".asInstanceOf[K]).get(0)
-            buildTableHashMap(i.toString().asInstanceOf[K]) = ArrayBuffer[Tuple](t)
+            buildTableHashMap(i.toString().asInstanceOf[K]) = ArrayBuffer[Tuple](exampleTuple)
           }
 //          if (buildTableHashMap.keySet.size < 13) {
 //            println(
