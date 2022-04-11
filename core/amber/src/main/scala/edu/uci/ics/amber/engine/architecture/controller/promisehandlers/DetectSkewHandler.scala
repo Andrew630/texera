@@ -432,7 +432,7 @@ trait DetectSkewHandler {
               s"Specific helper load ${specificHelperLoad}, increased numerator ${redirectNum.toLong + prevRedirectNum}, average load ${averageLoad}, skewedLoad ${skewedLoad}"
             )
           }
-          prevRedirectNum += redirectNum.toLong + prevRedirectNum
+          prevRedirectNum = redirectNum.toLong + prevRedirectNum
           workerToTotalLoadHistory(skewedOpId)(id)(WorkerActorVirtualIdentity(tweetSkewedWorkerString + "[" + tweetHelperWorkerOrder(i) + "]")) = new ArrayBuffer[Long]()
         }
         workerToTotalLoadHistory(skewedOpId)(id)(skewedAndFreeWorkersList(0)._1) = new ArrayBuffer[Long]()
