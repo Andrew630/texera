@@ -45,7 +45,7 @@ object Constants {
 
   var dynamicDistributionExpTrigger = false
   val multipleHelpers = true
-  val numOfHelpers = 24
+  val numOfHelpers = 16
 
   type joinType = String
 }
