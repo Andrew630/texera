@@ -7,9 +7,6 @@ import edu.uci.ics.texera.workflow.common.metadata.annotations.AutofillAttribute
 import edu.uci.ics.texera.workflow.common.tuple.Tuple;
 import edu.uci.ics.texera.workflow.common.tuple.schema.AttributeType;
 
-import java.util.Arrays;
-import java.util.List;
-
 public class FilterPredicate {
 
     @JsonProperty(value = "attribute", required = true)
@@ -75,17 +72,17 @@ public class FilterPredicate {
         if (value == null) {
             return compareToValue == null;
         }
-        List<String> slangs = Arrays.asList("112", "34", "432", "322", "3434", "22223", "232", "112", "34", "432", "322", "3434", "22223", "232",
-                "112", "34", "432", "322", "3434", "22223", "232", "112", "34", "432", "322", "3434", "22223", "232",
-                "34", "432", "322", "3434", "22223", "232", "112", "34", "432", "322", "3434", "22223", "232",
-                "34", "432", "322", "3434", "22223", "232", "112", "34", "432", "322", "3434", "22223", "232",
-                "34", "432", "322", "3434", "22223", "232", "112", "34", "432", "322", "3434", "22223", "232");
-        int found = 0;
-        for (int i = 0; i < slangs.size() - 1; i++) {
-            if (slangs.get(i).contains(value.toString())) {
-                found++;
-            }
-        }
+//        List<String> slangs = Arrays.asList("112", "34", "432", "322", "3434", "22223", "232", "112", "34", "432", "322", "3434", "22223", "232",
+//                "112", "34", "432", "322", "3434", "22223", "232", "112", "34", "432", "322", "3434", "22223", "232",
+//                "34", "432", "322", "3434", "22223", "232", "112", "34", "432", "322", "3434", "22223", "232",
+//                "34", "432", "322", "3434", "22223", "232", "112", "34", "432", "322", "3434", "22223", "232",
+//                "34", "432", "322", "3434", "22223", "232", "112", "34", "432", "322", "3434", "22223", "232");
+//        int found = 0;
+//        for (int i = 0; i < slangs.size() - 1; i++) {
+//            if (slangs.get(i).contains(value.toString())) {
+//                found++;
+//            }
+//        }
 
         int compareResult = value.compareTo(compareToValue);
         switch (comparisonType) {
@@ -102,7 +99,7 @@ public class FilterPredicate {
             case NOT_EQUAL_TO:
                 return compareResult != 0;
             default:
-                System.out.println(found);
+                //System.out.println(found);
                 throw new RuntimeException(
                         "Unable to do comparison: unknown comparison type: " + comparisonType);
         }
