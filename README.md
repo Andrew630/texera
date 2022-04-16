@@ -1,32 +1,51 @@
-# Texera
-Collaborative big data analytics as cloud services using GUI-based workflows. 
+# Reshape
+This is the code for the implementation of Reshape on the Amber engine. Amber is the backend engine for [Texera](https://github.com/Texera/texera).
 
-To use Texera, follow instructions on the [Getting Started](https://github.com/Texera/texera/wiki/Getting-Started) page
+## Install packages
+1. Install `Java JDK 8 or 11 (Java Development Kit)` (recommend: `adoptopenjdk`) for running the backend engine of Texera and set JAVA_HOME in your path.
+2. Install `sbt` for building the project, check https://www.scala-sbt.org/1.x/docs/Setup.html. We recommend using `sdkman` to install sbt if you are using Java 8. Sbt installed using brew has problem with Java 8, as documented [here](https://stackoverflow.com/questions/61271015/sbt-fails-with-string-class-is-broken).
+3. Install `Git`.
+* On Windows, install the software from https://gitforwindows.org/
+* On Mac and Linux, see https://git-scm.com/book/en/v2/Getting-Started-Installing-Git
+4. Install `Node.js` and `npm` (Install an LTS version instead of the latest. Currently it’s version 14.x)     
+[https://nodejs.org/en/](https://nodejs.org/en/). [Use NVM to install NodeJS](https://nodesource.com/blog/installing-node-js-tutorial-using-nvm-on-mac-os-x-and-ubuntu/) because it avoids permission issues when using node.
+5. Install `yarn` package manager: https://classic.yarnpkg.com/en/docs/install/
 
-[![Actions Status](https://github.com/Texera/texera/workflows/build/badge.svg)](https://github.com/Texera/texera/actions)
+## Building the project
+```console
+cd core
+./scripts/build.sh
+```
+## Running the project:
+1. Open a command line and navigate to the cloned repository. If you are on Windows, you need to use [Git Bash](https://gitforwindows.org/) as a Linux bash shell in order to run shell scripts.
 
-## Publications:
+2. Navigate to the `core` directory
+```console
+cd core
+```
+Then build the project. 
+```console
+./scripts/build.sh
+```
+Depending on your environment, it may take a few minutes (around 2 minutes to 6 minutes).
 
-* (4/2017) A Demonstration of TextDB: Declarative and Scalable Text Analytics on Large Data Sets, Zuozhi Wang, Flavio Bayer, Seungjin Lee, Kishore Narendran, Xuxi Pan, Qing Tang, Jimmy Wang, Chen Li, [ICDE 2017](http://icde2017.sdsc.edu/), **Best Demo award**, [PDF](https://chenli.ics.uci.edu/files/icde2017-textdb-demo.pdf), [Video](https://github.com/Texera/texera/wiki/Video).
-* (1/2020) Amber: A Debuggable Dataflow system based on the Actor Model, Avinash Kumar, Zuozhi Wang, Shengquan Ni, Chen Li, VLDB 2020 [PDF](http://www.vldb.org/pvldb/vol13/p740-kumar.pdf), [Video](https://www.youtube.com/watch?v=T5ShFRfHmgI), [Slides](https://docs.google.com/presentation/d/1v8G9lDmfv4Ff2YWyrGfo_9iMQVF4N8a-4gO4H-K6rCk/edit?usp=sharing)
-* (7/2020) Demonstration of Interactive Runtime Debugging of
-Distributed Dataflows in Texera, Zuozhi Wang, Avinash Kumar, Shengquan Ni, Chen Li, VLDB 2020 [PDF](http://www.vldb.org/pvldb/vol13/p2953-wang.pdf), [Video](https://www.youtube.com/watch?v=SP-XiDADbw0), [Slides](https://docs.google.com/presentation/d/14U6RPZfeb8Ho0aO2HsCSc8lRs6ul6AxEIm5gpjeVUYA/edit?usp=sharing)
+3. Start the Texera Web server. In the `core` directory:
+```console
+./scripts/server.sh
+```
+Wait until you see the message `org.eclipse.jetty.server.Server: Started`
 
-## Videos
+4. Start the Texera worker process. Open a new terminal window. In the `core` directory:
+```console
+./scripts/worker.sh
+```
+Wait until you see the message `---------Now we have 1 nodes in the cluster---------`
 
-* [Texera demo in VLDB 2020](https://www.youtube.com/watch?v=SP-XiDADbw0)
-* [Amber engine presentation in VLDB 2020](https://www.youtube.com/watch?v=T5ShFRfHmgI)
+Note: (if `./scripts/worker.sh` gives a "permission denied error", just do `chmod 755 scripts/worker.sh` to grant an execute permission to the file).
 
-To access a live deployment and do tweet analysis, go to [texera.ics.uci.edu/twitter](http://texera.ics.uci.edu/twitter/) (accessible inside UCI).
+5. Open a browser and access `http://localhost:8080`.
 
-## Snapshots of the system at work ##
-Texera UI showing a paused workflow
-![](https://docs.google.com/drawings/d/e/2PACX-1vTLd6QfcTL-bqa1XPuC1gmjee17j95SaAikIlmnybETZu3Bh1aVzKJzHccIS69iGoz0w7NunxxlFWZF/pub?w=960&h=470)
-
-Texera UI showing a completed workflow, summarized metrics and results
-![](https://docs.google.com/drawings/d/e/2PACX-1vRigAWyNziYNcBoP8X20GmGmabBG8xO4JOnHaunu-Pa7HOADEdTxBW_1Srmf4kKZWoPTQVuEJmh7Npl/pub?w=960&h=540)
-
-## Acknowledgements ##
-
-This project is supported by the National Science Foundation under the grant [III 1745673](https://www.nsf.gov/awardsearch/showAward?AWD_ID=1745673).
-
+## To use Reshape on Amber:
+1. Go to the [Constants](https://github.com/Reshape-skew-handling/reshape-on-amber/blob/main/core/amber/src/main/scala/edu/uci/ics/amber/engine/common/Constants.scala) file. It contains the configuration information.
+2. Set `onlyDetectSkew = false` to enable Reshape on Amber.
+3. The skew detection threshold τ can be adjused using the variable `threshold`.
