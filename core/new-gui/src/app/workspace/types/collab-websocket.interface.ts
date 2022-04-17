@@ -1,5 +1,6 @@
 import { Serializable } from "src/app/common/util/serializable-tree";
 import { SerializableCallEvent } from "../service/undo-redo/EventSerializer";
+import { YDocUpdate } from "../service/undo-redo/YDoc.service";
 
 export interface WIdRequest
   extends Readonly<{
@@ -26,7 +27,18 @@ export interface HistoryEvent extends Readonly<{
   payload: string;
   }> {}
 
+export interface YDocRequest  extends Readonly<{
+  payload: string;
+  }> {}
+
+export interface YDocEvent extends Readonly<{
+  payload: string;
+  }> {}
+
+
 export interface HistoryMessage extends Readonly<SerializableCallEvent> {}
+
+export interface YDocMessage extends Readonly<YDocUpdate> {}
 export interface WorkflowAccessEvent
   extends Readonly<{
     workflowReadonly: boolean;
@@ -40,6 +52,7 @@ export type CollabWebsocketRequestTypeMap = {
   TryLockRequest: {};
   RestoreVersionRequest: {};
   HistoryRequest: HistoryRequest;
+  YDocRequest: YDocRequest;
 };
 
 export type CollabWebsocketEventTypeMap = {
@@ -52,6 +65,7 @@ export type CollabWebsocketEventTypeMap = {
   RestoreVersionEvent: {};
   WorkflowAccessEvent: WorkflowAccessEvent;
   HistoryEvent: HistoryEvent;
+  YDocEvent: YDocEvent;
 };
 
 // helper type definitions to generate the request and event types

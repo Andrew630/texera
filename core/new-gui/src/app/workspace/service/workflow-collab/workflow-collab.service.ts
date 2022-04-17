@@ -14,12 +14,14 @@ import {
   CollabWebsocketRequestTypeMap,
   HistoryEvent,
   HistoryMessage,
+  YDocMessage,
 } from "../../types/collab-websocket.interface";
 import { CommandMessage } from "../../types/command.interface";
 import { History } from "../undo-redo/History.service";
 import { SerializableRecorder } from "../undo-redo/SerializableRecorder";
 import { JSONparse, JSONstringify, Serializable } from "src/app/common/util/serializable-tree";
 import { SerializableReplayer } from "../undo-redo/SerializableReplayer";
+import { deserialize } from "../undo-redo/YDoc.service";
 
 export const WS_HEARTBEAT_INTERVAL_MS = 10000;
 export const WS_RECONNECT_INTERVAL_MS = 3000;
@@ -51,6 +53,7 @@ export class WorkflowCollabService {
   private readonly restoreVersionSubject: ReplaySubject<boolean> = new ReplaySubject(1);
   private readonly workflowAccessSubject: ReplaySubject<boolean> = new ReplaySubject(1);
   private readonly historyMessageSubject: Subject<HistoryMessage> = new Subject<HistoryMessage>();
+  private readonly yDocMessageSubject: Subject<YDocMessage> = new Subject<YDocMessage>();
 
   constructor() {
     // In case collab is not enabled, lock should always be granted.
@@ -79,6 +82,10 @@ export class WorkflowCollabService {
       this.subscribeToEvent("HistoryEvent").subscribe(historyEvent => {
         const message = JSONparse(historyEvent.payload) as HistoryMessage;
         this.historyMessageSubject.next(message);
+      });
+
+      this.subscribeToEvent("YDocEvent").subscribe(async (YDocEvent) => {
+        this.yDocMessageSubject.next(deserialize(YDocEvent.payload));
       });
 
       this.subscribeToEvent("LockGrantedEvent").subscribe(_ => {
@@ -200,8 +207,8 @@ export class WorkflowCollabService {
    */
   public send<T extends CollabWebsocketRequestTypes>(type: T, payload: CollabWebsocketRequestTypeMap[T]): void {
     const request = {
-      type,
       ...payload,
+      type,
     } as any as CollabWebsocketRequest;
     console.log(payload);
     this.websocket?.next(request);
@@ -295,6 +302,10 @@ export class WorkflowCollabService {
 
   public getHistStream(): Observable<HistoryMessage> {
     return this.historyMessageSubject.asObservable();
+  }
+
+  public getYDocStream(): Observable<YDocMessage> {
+    return this.yDocMessageSubject.asObservable();
   }
 
   /**

@@ -3,6 +3,7 @@ import { Observable, Subject } from "rxjs";
 import { nonNull } from "../../../common/util/assert";
 import { Command, CommandMessage } from "../../types/command.interface";
 import { WorkflowCollabService } from "./../workflow-collab/workflow-collab.service";
+import { YDocService } from "./YDoc.service";
 
 /* TODO LIST FOR BUGS
 1. Problem with repeatedly adding and deleting a link without letting go, unintended behavior
@@ -25,7 +26,9 @@ export class UndoRedoService {
   private canUndoStream = new Subject<boolean>();
   private canRedoStream = new Subject<boolean>();
 
-  constructor(private workflowCollabService: WorkflowCollabService) {
+  constructor(private workflowCollabService: WorkflowCollabService,
+    private yDocService: YDocService) {
+    console.log("YDOCSERVICE", yDocService)
     this.listenToRemoteChange();
   }
 

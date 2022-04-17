@@ -9,6 +9,7 @@ import com.google.api.ResourceDescriptor.History
   Array(
     new Type(value = classOf[CommandEvent]),
     new Type(value = classOf[HistoryEvent]),
+    new Type(value = classOf[YDocEvent]),
     new Type(value = classOf[LockGrantedEvent]),
     new Type(value = classOf[ReleaseLockEvent]),
     new Type(value = classOf[LockRejectedEvent]),
