@@ -18,9 +18,9 @@ object Constants {
   var currentWorkerNum = 0
   var masterNodeAddr: Address = Address("akka", "Amber", "localhost", 2552)
   var defaultTau: FiniteDuration = 10.milliseconds
-  
+
   val gcpExp = true
-  val sortExperiment = true
+  val sortExperiment = false
   var monitoringEnabled: Boolean =
     AmberUtils.amberConfig.getBoolean("monitoring.monitoring-enabled")
   var monitoringIntervalInMs: Int =
