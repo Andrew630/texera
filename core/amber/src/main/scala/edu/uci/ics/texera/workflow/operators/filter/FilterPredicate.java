@@ -31,6 +31,9 @@ public class FilterPredicate {
 
     @JsonIgnore
     public boolean evaluate(Tuple tuple, WorkflowContext context) {
+        if (tuple == null) {
+            return false;
+        }
         boolean isFieldNull = tuple.getField(attribute) == null;
         if (condition == ComparisonType.IS_NULL) {
             return isFieldNull;
