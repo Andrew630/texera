@@ -7,10 +7,9 @@ import edu.uci.ics.amber.engine.architecture.controller.promisehandlers.WorkerEx
   WorkerExecutionCompleted,
   getReadableTime
 }
-import edu.uci.ics.amber.engine.architecture.controller.{
-  ControllerAsyncRPCHandlerInitializer,
-  ControllerState
-}
+import edu.uci.ics.amber.engine.architecture.controller.{ControllerAsyncRPCHandlerInitializer}
+import edu.uci.ics.amber.engine.architecture.controller.promisehandlers.WorkerExecutionCompletedHandler.WorkerExecutionCompleted
+import edu.uci.ics.amber.engine.architecture.controller.ControllerAsyncRPCHandlerInitializer
 import edu.uci.ics.amber.engine.common.rpc.AsyncRPCServer.ControlCommand
 import edu.uci.ics.amber.engine.common.virtualidentity.ActorVirtualIdentity
 import edu.uci.ics.amber.engine.common.virtualidentity.util.CONTROLLER

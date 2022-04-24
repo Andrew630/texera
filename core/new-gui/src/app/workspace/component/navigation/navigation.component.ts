@@ -1,6 +1,5 @@
 import { DatePipe, Location } from "@angular/common";
-import { Component, ElementRef, Input, ViewChild } from "@angular/core";
-import { TourService } from "ngx-tour-ng-bootstrap";
+import { ChangeDetectorRef, Component, ElementRef, Input, OnInit, ViewChild } from "@angular/core";
 import { environment } from "../../../../environments/environment";
 import { UserService } from "../../../common/service/user/user.service";
 import { WorkflowPersistService } from "../../../common/service/workflow-persist/workflow-persist.service";
@@ -8,7 +7,6 @@ import { Workflow } from "../../../common/type/workflow";
 import { ExecuteWorkflowService } from "../../service/execute-workflow/execute-workflow.service";
 import { UndoRedoService } from "../../service/undo-redo/undo-redo.service";
 import { ValidationWorkflowService } from "../../service/validation/validation-workflow.service";
-import { WorkflowCacheService } from "../../service/workflow-cache/workflow-cache.service";
 import { JointGraphWrapper } from "../../service/workflow-graph/model/joint-graph-wrapper";
 import { WorkflowActionService } from "../../service/workflow-graph/model/workflow-action.service";
 import { ExecutionState } from "../../types/execute-workflow.interface";
@@ -17,8 +15,10 @@ import { merge } from "rxjs";
 import { WorkflowResultExportService } from "../../service/workflow-result-export/workflow-result-export.service";
 import { debounceTime } from "rxjs/operators";
 import { UntilDestroy, untilDestroyed } from "@ngneat/until-destroy";
-import { VIEW_RESULT_OP_TYPE } from "../../service/workflow-graph/model/workflow-graph";
+import { WorkflowUtilService } from "../../service/workflow-graph/util/workflow-util.service";
+import { isSink } from "../../service/workflow-graph/model/workflow-graph";
 import { WorkflowVersionService } from "../../../dashboard/service/workflow-version/workflow-version.service";
+import { WorkflowCollabService } from "../../service/workflow-collab/workflow-collab.service";
 
 /**
  * NavigationComponent is the top level navigation bar that shows
@@ -41,7 +41,7 @@ import { WorkflowVersionService } from "../../../dashboard/service/workflow-vers
   templateUrl: "./navigation.component.html",
   styleUrls: ["./navigation.component.scss"],
 })
-export class NavigationComponent {
+export class NavigationComponent implements OnInit {
   public executionState: ExecutionState; // set this to true when the workflow is started
   public ExecutionState = ExecutionState; // make Angular HTML access enum definition
   public isWorkflowValid: boolean = true; // this will check whether the workflow error or not
@@ -59,11 +59,14 @@ export class NavigationComponent {
 
   // whether user dashboard is enabled and accessible from the workspace
   public userSystemEnabled: boolean = environment.userSystemEnabled;
+  public workflowCollabEnabled: boolean = environment.workflowCollabEnabled;
+  public lockGranted: boolean = true;
+  public workflowReadonly: boolean = false;
   // flag to display a particular version in the current canvas
   public displayParticularWorkflowVersion: boolean = false;
   public onClickRunHandler: () => void;
 
-  // whether the disable operator button should be enabled
+  // whether the disable-operator-button should be enabled
   public isDisableOperatorClickable: boolean = false;
   public isDisableOperator: boolean = true;
 
@@ -71,9 +74,10 @@ export class NavigationComponent {
   public isCacheOperatorClickable: boolean = false;
   public isCacheOperator: boolean = true;
 
+  public static readonly COLLAB_RELOAD_WAIT_TIME = 500;
+
   constructor(
     public executeWorkflowService: ExecuteWorkflowService,
-    public tourService: TourService,
     public workflowActionService: WorkflowActionService,
     public workflowWebsocketService: WorkflowWebsocketService,
     private location: Location,
@@ -82,9 +86,11 @@ export class NavigationComponent {
     public workflowPersistService: WorkflowPersistService,
     public workflowVersionService: WorkflowVersionService,
     public userService: UserService,
-    private workflowCacheService: WorkflowCacheService,
     private datePipe: DatePipe,
-    public workflowResultExportService: WorkflowResultExportService
+    public workflowResultExportService: WorkflowResultExportService,
+    public workflowCollabService: WorkflowCollabService,
+    public workflowUtilService: WorkflowUtilService,
+    public changeDetectionRef: ChangeDetectorRef
   ) {
     this.executionState = executeWorkflowService.getExecutionState().state;
     // return the run button after the execution is finished, either
@@ -95,8 +101,10 @@ export class NavigationComponent {
     this.runDisable = initBehavior.disable;
     this.onClickRunHandler = initBehavior.onClick;
     // this.currentWorkflowName = this.workflowCacheService.getCachedWorkflow();
+  }
 
-    executeWorkflowService
+  public ngOnInit(): void {
+    this.executeWorkflowService
       .getExecutionStateStream()
       .pipe(untilDestroyed(this))
       .subscribe(event => {
@@ -105,7 +113,7 @@ export class NavigationComponent {
       });
 
     // set the map of operatorStatusMap
-    validationWorkflowService
+    this.validationWorkflowService
       .getWorkflowValidationErrorStream()
       .pipe(untilDestroyed(this))
       .subscribe(value => {
@@ -117,6 +125,8 @@ export class NavigationComponent {
     this.handleWorkflowVersionDisplay();
     this.handleDisableOperatorStatusChange();
     this.handleCacheOperatorStatusChange();
+    this.handleLockChange();
+    this.handleWorkflowAccessChange();
   }
 
   // apply a behavior to the run button via bound variables
@@ -198,6 +208,10 @@ export class NavigationComponent {
           onClick: () => {},
         };
     }
+  }
+
+  public onClickAddCommentBox(): void {
+    this.workflowActionService.addCommentBox(this.workflowUtilService.getNewCommentBox());
   }
 
   public handleKill(): void {
@@ -345,30 +359,22 @@ export class NavigationComponent {
    */
   public onClickDisableOperators(): void {
     if (this.isDisableOperator) {
-      this.effectivelyHighlightedOperators().forEach(op => {
-        this.workflowActionService.getTexeraGraph().disableOperator(op);
-      });
+      this.workflowActionService.disableOperators(this.effectivelyHighlightedOperators());
     } else {
-      this.effectivelyHighlightedOperators().forEach(op => {
-        this.workflowActionService.getTexeraGraph().enableOperator(op);
-      });
+      this.workflowActionService.enableOperators(this.effectivelyHighlightedOperators());
     }
   }
 
   public onClickCacheOperators(): void {
     const effectiveHighlightedOperators = this.effectivelyHighlightedOperators();
     const effectiveHighlightedOperatorsExcludeSink = effectiveHighlightedOperators.filter(
-      op => this.workflowActionService.getTexeraGraph().getOperator(op).operatorType !== VIEW_RESULT_OP_TYPE
+      op => !isSink(this.workflowActionService.getTexeraGraph().getOperator(op))
     );
 
     if (this.isCacheOperator) {
-      effectiveHighlightedOperatorsExcludeSink.forEach(op => {
-        this.workflowActionService.getTexeraGraph().cacheOperator(op);
-      });
+      this.workflowActionService.cacheOperators(effectiveHighlightedOperatorsExcludeSink);
     } else {
-      effectiveHighlightedOperatorsExcludeSink.forEach(op => {
-        this.workflowActionService.getTexeraGraph().unCacheOperator(op);
-      });
+      this.workflowActionService.unCacheOperators(effectiveHighlightedOperatorsExcludeSink);
     }
   }
 
@@ -383,20 +389,22 @@ export class NavigationComponent {
   }
 
   public persistWorkflow(): void {
-    this.isSaving = true;
-    this.workflowPersistService
-      .persistWorkflow(this.workflowActionService.getWorkflow())
-      .pipe(untilDestroyed(this))
-      .subscribe(
-        (updatedWorkflow: Workflow) => {
-          this.workflowActionService.setWorkflowMetadata(updatedWorkflow);
-          this.isSaving = false;
-        },
-        (error: unknown) => {
-          alert(error);
-          this.isSaving = false;
-        }
-      );
+    if (this.workflowCollabService.isLockGranted()) {
+      this.isSaving = true;
+      this.workflowPersistService
+        .persistWorkflow(this.workflowActionService.getWorkflow())
+        .pipe(untilDestroyed(this))
+        .subscribe(
+          (updatedWorkflow: Workflow) => {
+            this.workflowActionService.setWorkflowMetadata(updatedWorkflow);
+            this.isSaving = false;
+          },
+          (error: unknown) => {
+            alert(error);
+            this.isSaving = false;
+          }
+        );
+    }
   }
 
   /**
@@ -412,6 +420,10 @@ export class NavigationComponent {
   onClickCreateNewWorkflow() {
     this.workflowActionService.resetAsNewWorkflow();
     this.location.go("/");
+  }
+
+  onClickAcquireLock() {
+    this.workflowCollabService.acquireLock();
   }
 
   registerWorkflowMetadataDisplayRefresh() {
@@ -465,6 +477,9 @@ export class NavigationComponent {
     this.workflowVersionService.revertToVersion();
     // after swapping the workflows to point to the particular version, persist it in DB
     this.persistWorkflow();
+    setTimeout(() => {
+      this.workflowCollabService.requestOthersToReload();
+    }, NavigationComponent.COLLAB_RELOAD_WAIT_TIME);
   }
 
   /**
@@ -504,7 +519,7 @@ export class NavigationComponent {
       .subscribe(event => {
         const effectiveHighlightedOperators = this.effectivelyHighlightedOperators();
         const effectiveHighlightedOperatorsExcludeSink = effectiveHighlightedOperators.filter(
-          op => this.workflowActionService.getTexeraGraph().getOperator(op).operatorType !== VIEW_RESULT_OP_TYPE
+          op => !isSink(this.workflowActionService.getTexeraGraph().getOperator(op))
         );
 
         const allCached = effectiveHighlightedOperatorsExcludeSink.every(op =>
@@ -513,6 +528,25 @@ export class NavigationComponent {
 
         this.isCacheOperator = !allCached;
         this.isCacheOperatorClickable = effectiveHighlightedOperatorsExcludeSink.length !== 0;
+      });
+  }
+
+  private handleLockChange(): void {
+    this.workflowCollabService
+      .getLockStatusStream()
+      .pipe(untilDestroyed(this))
+      .subscribe((lockGranted: boolean) => {
+        this.lockGranted = lockGranted;
+        this.changeDetectionRef.detectChanges();
+      });
+  }
+
+  private handleWorkflowAccessChange(): void {
+    this.workflowCollabService
+      .getWorkflowAccessStream()
+      .pipe(untilDestroyed(this))
+      .subscribe((workflowReadonly: boolean) => {
+        this.workflowReadonly = workflowReadonly;
       });
   }
 

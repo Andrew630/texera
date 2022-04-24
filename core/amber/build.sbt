@@ -2,7 +2,7 @@ name := "texera"
 organization := "edu.uci.ics"
 version := "0.1-SNAPSHOT"
 
-scalaVersion := "2.12.14"
+scalaVersion := "2.12.15"
 
 // to turn on, use: INFO
 // to turn off, use: WARNING
@@ -160,7 +160,7 @@ libraryDependencies ++= Seq(
 // protobuf related
 // run the following with sbt to have protobuf codegen
 
-PB.protocVersion := "3.17.3"
+PB.protocVersion := "3.19.4"
 
 Compile / PB.targets := Seq(
   scalapb.gen(
@@ -194,8 +194,8 @@ libraryDependencies += "com.flipkart.zjsonpatch" % "zjsonpatch" % "0.2.1"
 /////////////////////////////////////////////////////////////////////////////
 // Uncategorized
 
-// https://mvnrepository.com/artifact/io.reactivex/rxscala
-libraryDependencies += "io.reactivex" % "rxscala_2.12" % "0.27.0"
+// https://mvnrepository.com/artifact/io.reactivex.rxjava3/rxjava
+libraryDependencies += "io.reactivex.rxjava3" % "rxjava" % "3.1.3"
 
 // https://mvnrepository.com/artifact/org.postgresql/postgresql
 libraryDependencies += "org.postgresql" % "postgresql" % "42.2.18"
@@ -216,7 +216,7 @@ libraryDependencies += "com.konghq" % "unirest-java" % "3.11.11"
 libraryDependencies += "com.github.marianobarrios" % "lbmq" % "0.5.0"
 
 // https://mvnrepository.com/artifact/io.github.redouane59.twitter/twittered
-libraryDependencies += "io.github.redouane59.twitter" % "twittered" % "2.7"
+libraryDependencies += "io.github.redouane59.twitter" % "twittered" % "2.16"
 
 // https://mvnrepository.com/artifact/org.jooq/jooq
 libraryDependencies += "org.jooq" % "jooq" % "3.14.4"

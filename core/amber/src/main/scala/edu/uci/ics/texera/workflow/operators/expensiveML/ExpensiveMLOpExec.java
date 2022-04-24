@@ -82,7 +82,7 @@ public class ExpensiveMLOpExec extends MapOpExec {
         Double val = Double.parseDouble(t.getField(opDesc.attribute).toString());
         INDArray output = net.output(mkInput(val));
         double fraudProb = output.getDouble(0, 0, currentInputNum - 1);
-        return Tuple.newBuilder(operatorSchemaInfo.outputSchema()).add(t).add(opDesc.resultAttribute, AttributeType.DOUBLE, fraudProb).build();
+        return Tuple.newBuilder(operatorSchemaInfo.outputSchemas()[0]).add(t).add(opDesc.resultAttribute, AttributeType.DOUBLE, fraudProb).build();
     }
 
 }

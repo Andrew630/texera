@@ -17,6 +17,8 @@ import edu.uci.ics.amber.engine.common.rpc.{
 import edu.uci.ics.amber.engine.common.virtualidentity.{ActorVirtualIdentity, OperatorIdentity}
 
 import scala.collection.mutable
+
+import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration.{DurationInt, FiniteDuration, MILLISECONDS}
 
 class ControllerAsyncRPCHandlerInitializer(
@@ -48,8 +50,8 @@ class ControllerAsyncRPCHandlerInitializer(
     with MonitoringHandler {
 
   var statusUpdateAskHandle: Option[Cancellable] = None
+
   var monitoringHandle: Option[Cancellable] = None
-  var skewDetectionHandle: Option[Cancellable] = None
   var workflowStartTime: Long = _
   var workflowEndTime: Long = _
   var operatorStartTime: mutable.HashMap[OperatorIdentity, Long] =
@@ -62,6 +64,7 @@ class ControllerAsyncRPCHandlerInitializer(
     new mutable.HashMap[ActorVirtualIdentity, Long]()
   var workerStatisticsTime: mutable.HashMap[ActorVirtualIdentity, Long] =
     new mutable.HashMap[ActorVirtualIdentity, Long]()
+  var workflowReshapeState: WorkflowReshapeState = new WorkflowReshapeState()
 
   def enableStatusUpdate(): Unit = {
     if (controllerConfig.statusUpdateIntervalMs.nonEmpty && statusUpdateAskHandle.isEmpty) {
@@ -99,11 +102,11 @@ class ControllerAsyncRPCHandlerInitializer(
 
   def enableSkewHandling(): Unit = {
     if (
-      Constants.reshapeSkewHandlingEnabled && controllerConfig.skewDetectionIntervalMs.nonEmpty && skewDetectionHandle.isEmpty
+      Constants.reshapeSkewHandlingEnabled && controllerConfig.skewDetectionIntervalMs.nonEmpty && workflowReshapeState.skewDetectionHandle.isEmpty
     ) {
-      skewDetectionHandle = Option(
+      workflowReshapeState.skewDetectionHandle = Option(
         actorContext.system.scheduler.scheduleAtFixedRate(
-          5000.milliseconds,
+          Constants.reshapeSkewDetectionInitialDelayInMs.milliseconds,
           FiniteDuration.apply(controllerConfig.skewDetectionIntervalMs.get, MILLISECONDS),
           actorContext.self,
           ControlInvocation(
@@ -130,11 +133,11 @@ class ControllerAsyncRPCHandlerInitializer(
   }
 
   def disableSkewHandling(): Unit = {
-    if (skewDetectionHandle.nonEmpty) {
-      skewDetectionHandle.get.cancel()
-      skewDetectionHandle = Option.empty
+    if (workflowReshapeState.skewDetectionHandle.nonEmpty) {
+      workflowReshapeState.skewDetectionHandle.get.cancel()
+      workflowReshapeState.skewDetectionHandle = Option.empty
     }
-  
+
   }
 
 }

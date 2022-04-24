@@ -8,7 +8,6 @@ from core.util.customized_queue.double_blocking_queue import DoubleBlockingQueue
 
 
 class TestDoubleBlockingQueue:
-
     @pytest.fixture
     def queue(self):
         return DoubleBlockingQueue(int)
@@ -48,11 +47,11 @@ class TestDoubleBlockingQueue:
         queue.put("s3")
         queue.put(3)
         queue.put("s4")
-        l = list()
+        res = list()
         while not queue.empty():
-            l.append(queue.get())
+            res.append(queue.get())
 
-        assert l == ["s1", "s2", "s3", "s4", 1, 99, 3]
+        assert res == ["s1", "s2", "s3", "s4", 1, 99, 3]
 
     def test_can_disable_sub(self, queue):
         queue.disable_sub()
@@ -63,22 +62,22 @@ class TestDoubleBlockingQueue:
         queue.put("s3")
         queue.put(3)
         queue.put("s4")
-        l = list()
+        res = list()
         while not queue.empty():
-            l.append(queue.get())
+            res.append(queue.get())
 
-        assert l == ["s1", "s2", "s3", "s4"]
+        assert res == ["s1", "s2", "s3", "s4"]
         assert queue.empty()
         queue.enable_sub()
         assert not queue.empty()
-        l = list()
+        res = list()
         while not queue.empty():
-            l.append(queue.get())
+            res.append(queue.get())
 
-        assert l == [1, 99, 3]
+        assert res == [1, 99, 3]
         assert queue.empty()
 
-    @pytest.mark.timeout(0.5)
+    @pytest.mark.timeout(2)
     def test_producer_first_insert_sub(self, queue, reraise):
         def producer():
             with reraise:
@@ -91,7 +90,7 @@ class TestDoubleBlockingQueue:
         assert queue.get() == 1
         reraise()
 
-    @pytest.mark.timeout(0.5)
+    @pytest.mark.timeout(2)
     def test_consumer_first_insert_sub(self, queue, reraise):
         def consumer():
             with reraise:
@@ -105,7 +104,7 @@ class TestDoubleBlockingQueue:
         consumer_thread.join()
         reraise()
 
-    @pytest.mark.timeout(0.5)
+    @pytest.mark.timeout(2)
     def test_producer_first_insert_main(self, queue, reraise):
         def producer():
             with reraise:
@@ -118,7 +117,7 @@ class TestDoubleBlockingQueue:
         assert queue.get() == "s"
         reraise()
 
-    @pytest.mark.timeout(0.5)
+    @pytest.mark.timeout(2)
     def test_consumer_first_insert_main(self, queue, reraise):
         def consumer():
             with reraise:
@@ -134,7 +133,6 @@ class TestDoubleBlockingQueue:
 
     @pytest.mark.timeout(5)
     def test_multiple_producer_race(self, queue, reraise):
-
         def producer(k):
             with reraise:
                 if isinstance(k, int):
@@ -152,13 +150,13 @@ class TestDoubleBlockingQueue:
             producer_thread = Thread(target=producer, args=(i,))
             producer_thread.start()
             threads.append(producer_thread)
-        l = set()
+        res = set()
 
         def consumer():
             with reraise:
                 queue.disable_sub()
-                while len(l) < len(target):
-                    l.add(queue.get())
+                while len(res) < len(target):
+                    res.add(queue.get())
 
         consumer_thread = Thread(target=consumer)
         consumer_thread.start()
@@ -166,7 +164,7 @@ class TestDoubleBlockingQueue:
             thread.join()
 
         consumer_thread.join()
-        assert l == target
+        assert res == target
 
         reraise()
 
@@ -187,7 +185,7 @@ class TestDoubleBlockingQueue:
 
         reraise()
 
-    @pytest.mark.timeout(0.5)
+    @pytest.mark.timeout(2)
     def test_common_single_producer_single_consumer(self, queue, reraise):
         def producer():
             with reraise:

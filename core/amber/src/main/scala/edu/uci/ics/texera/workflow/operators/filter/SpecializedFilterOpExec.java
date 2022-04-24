@@ -17,13 +17,8 @@ public class SpecializedFilterOpExec extends FilterOpExec {
     }
 
     public Boolean filterFunc(Tuple tuple) {
-        boolean satisfy = false;
-        for (FilterPredicate predicate : opDesc.predicates) {
-            satisfy = satisfy || predicate.evaluate(tuple, opDesc.context());
-        }
-        return satisfy;
+        return opDesc.predicates
+                .stream().anyMatch(predicate -> predicate.evaluate(tuple, opDesc.context()));
     }
-
-    ;
 
 }

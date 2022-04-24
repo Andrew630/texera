@@ -1,9 +1,10 @@
-import { fromEvent, Observable, ReplaySubject, Subject } from "rxjs";
+import { fromEvent, Observable, ReplaySubject, Subject, merge } from "rxjs";
+import { bufferToggle, filter, map, mergeMap, startWith, windowToggle } from "rxjs/operators";
 import { Point } from "../../../types/workflow-common.interface";
 import * as joint from "jointjs";
 import * as dagre from "dagre";
 import * as graphlib from "graphlib";
-import { filter, map } from "rxjs/operators";
+import { ObservableContextManager } from "src/app/common/util/context";
 
 type operatorIDsType = { operatorIDs: string[] };
 type linkIDType = { linkID: string };
@@ -40,7 +41,15 @@ export type JointHighlights = Readonly<{
   operators: readonly string[];
   groups: readonly string[];
   links: readonly string[];
+  commentBoxes: readonly string[];
 }>;
+
+export type JointGraphContextType = Readonly<{
+  async: boolean;
+}>;
+const DefaultContext: JointGraphContextType = {
+  async: false,
+};
 
 /**
  * JointGraphWrapper wraps jointGraph to provide:
@@ -69,6 +78,7 @@ export class JointGraphWrapper {
   public static readonly ZOOM_MINIMUM: number = 0.7;
   public static readonly ZOOM_MAXIMUM: number = 1.3;
 
+  public jointGraphContext = JointGraphWrapper.jointGraphContextFactory();
   public navigatorMoveDelta: Subject<{ deltaX: number; deltaY: number }> = new Subject();
 
   private mainJointPaper: joint.dia.Paper | undefined;
@@ -85,6 +95,7 @@ export class JointGraphWrapper {
     operators: [],
     groups: [],
     links: [],
+    commentBoxes: [],
   };
 
   // the currently highlighted operators' IDs
@@ -103,6 +114,12 @@ export class JointGraphWrapper {
   private jointLinkHighlightStream = new Subject<readonly string[]>();
   // event stream of unhighlighing a link
   private jointLinkUnhighlightStream = new Subject<readonly string[]>();
+
+  private jointCommentBoxHighlightStream = new Subject<readonly string[]>();
+
+  private jointCommentBoxUnhighlightStream = new Subject<readonly string[]>();
+
+  private currentHighlightedCommentBoxes: string[] = [];
 
   // event stream of zooming the jointJS paper
   private workflowEditorZoomSubject: Subject<number> = new Subject<number>();
@@ -171,6 +188,7 @@ export class JointGraphWrapper {
     const paper = new joint.dia.Paper(paperOptions);
     this.mainJointPaper = paper;
     this.mainJointPaperAttachedStream.next(this.mainJointPaper);
+    this.jointGraphContext.attachPaper(paper);
     return paper;
   }
 
@@ -241,11 +259,16 @@ export class JointGraphWrapper {
     return this.currentHighlightedLinks;
   }
 
+  public getCurrentHighlightedCommentBoxIDs(): readonly string[] {
+    return this.currentHighlightedCommentBoxes;
+  }
+
   public getCurrentHighlights(): JointHighlights {
     return {
       operators: this.currentHighlightedOperators,
       groups: this.currentHighlightedGroups,
       links: this.currentHighlightedLinks,
+      commentBoxes: this.currentHighlightedCommentBoxes,
     };
   }
 
@@ -315,12 +338,14 @@ export class JointGraphWrapper {
     this.highlightOperators(...elements.operators);
     this.highlightGroups(...elements.groups);
     this.highlightLinks(...elements.links);
+    this.highlightCommentBoxes(...elements.commentBoxes);
   }
 
   public unhighlightElements(elements: JointHighlights): void {
     this.unhighlightOperators(...elements.operators);
     this.unhighlightGroups(...elements.groups);
     this.unhighlightLinks(...elements.links);
+    this.unhighlightCommentBoxes(...elements.commentBoxes);
   }
 
   /**
@@ -417,11 +442,32 @@ export class JointGraphWrapper {
     }
   }
 
+  public highlightCommentBoxes(...commentBoxIDs: string[]): void {
+    const highlightedCommentBoxesIDs: string[] = [];
+    this.unhighlightCommentBoxes(...this.currentHighlightedCommentBoxes);
+    commentBoxIDs.forEach(commentBoxID =>
+      this.highlightElement(commentBoxID, this.currentHighlightedCommentBoxes, highlightedCommentBoxesIDs)
+    );
+
+    if (highlightedCommentBoxesIDs.length > 0) {
+      this.jointCommentBoxHighlightStream.next(highlightedCommentBoxesIDs);
+    }
+  }
+
+  public unhighlightCommentBoxes(...commentBoxIDs: string[]): void {
+    const unhighlightedCommentBoxesIDs: string[] = [];
+    commentBoxIDs.forEach(commentBoxID =>
+      this.unhighlightElement(commentBoxID, this.currentHighlightedCommentBoxes, unhighlightedCommentBoxesIDs)
+    );
+    if (unhighlightedCommentBoxesIDs.length > 0) {
+      this.jointCommentBoxUnhighlightStream.next(unhighlightedCommentBoxesIDs);
+    }
+  }
   /**
    * Gets the event stream of an operator being highlighted.
    */
   public getJointOperatorHighlightStream(): Observable<readonly string[]> {
-    return this.jointOperatorHighlightStream.asObservable();
+    return this.jointOperatorHighlightStream.pipe(this.jointGraphContext.bufferWhileAsync);
   }
 
   /**
@@ -429,7 +475,7 @@ export class JointGraphWrapper {
    * The operator could be unhighlighted because it's deleted.
    */
   public getJointOperatorUnhighlightStream(): Observable<readonly string[]> {
-    return this.jointOperatorUnhighlightStream.asObservable();
+    return this.jointOperatorUnhighlightStream.pipe(this.jointGraphContext.bufferWhileAsync);
   }
 
   /**
@@ -443,14 +489,14 @@ export class JointGraphWrapper {
    * get the event stream of a link being highlighted.
    */
   public getLinkHighlightStream(): Observable<readonly string[]> {
-    return this.jointLinkHighlightStream.asObservable();
+    return this.jointLinkHighlightStream.pipe(this.jointGraphContext.bufferWhileAsync);
   }
 
   /**
    * get the event stream of a link being unhighlighted.
    */
   public getLinkUnhighlightStream(): Observable<readonly string[]> {
-    return this.jointLinkUnhighlightStream.asObservable();
+    return this.jointLinkUnhighlightStream.pipe(this.jointGraphContext.bufferWhileAsync);
   }
 
   /**
@@ -471,7 +517,7 @@ export class JointGraphWrapper {
    * Gets the event stream of an operator being dragged.
    */
   public getJointGroupHighlightStream(): Observable<readonly string[]> {
-    return this.jointGroupHighlightStream.asObservable();
+    return this.jointGroupHighlightStream.pipe(this.jointGraphContext.bufferWhileAsync);
   }
 
   /**
@@ -479,9 +525,16 @@ export class JointGraphWrapper {
    * The group could be unhighlighted because it's deleted.
    */
   public getJointGroupUnhighlightStream(): Observable<readonly string[]> {
-    return this.jointGroupUnhighlightStream.asObservable();
+    return this.jointGroupUnhighlightStream.asObservable().pipe(this.jointGraphContext.bufferWhileAsync);
   }
 
+  public getJointCommentBoxHighlightStream(): Observable<readonly string[]> {
+    return this.jointCommentBoxHighlightStream.asObservable();
+  }
+
+  public getJointCommentBoxUnhighlightStream(): Observable<readonly string[]> {
+    return this.jointCommentBoxUnhighlightStream.asObservable();
+  }
   /**
    * Gets the event stream of an element being dragged.
    */
@@ -767,7 +820,7 @@ export class JointGraphWrapper {
     if (!cell) {
       throw new Error(`cell with ID ${cellID} doesn't exist`);
     }
-    return cell.attributes.z;
+    return cell.attributes.z || 0;
   }
 
   /**
@@ -798,6 +851,18 @@ export class JointGraphWrapper {
     this.listenPositionChange = listenPositionChange;
   }
 
+  public freeze(): void {
+    this.mainJointPaper?.freeze();
+  }
+
+  public unfreeze(): void {
+    this.mainJointPaper?.unfreeze();
+  }
+
+  public updateViews(): void {
+    this.mainJointPaper?.updateViews();
+  }
+
   /**
    * Highlights the element with given elementID.
    *
@@ -826,6 +891,7 @@ export class JointGraphWrapper {
       this.unhighlightOperators(...this.getCurrentHighlightedOperatorIDs());
       this.unhighlightGroups(...this.getCurrentHighlightedGroupIDs());
       this.unhighlightLinks(...this.getCurrentHighlightedLinkIDs());
+      this.unhighlightCommentBoxes(...this.getCurrentHighlightedCommentBoxIDs());
     }
     // highlight the element and add it to the list of highlighted elements
     currentHighlightedElements.push(elementID);
@@ -864,5 +930,100 @@ export class JointGraphWrapper {
         this.unhighlightLinks(deletedCellID);
       }
     });
+  }
+
+  // Modifies an observable to buffer output while the jointgraph
+  // is in an async context
+  public createContextAwareStream<T>(source: Observable<T>) {
+    // Code adapted from https://kddsky.medium.com/pauseable-observables-in-rxjs-58ce2b8c7dfd
+    // Retrieved on 02/06/2022
+
+    const BufferOnOffStream = this.jointGraphContext
+      .getChangeContextStream()
+      .pipe(map(([_, context]) => context.async));
+
+    const startBuffer = BufferOnOffStream.pipe(filter(async => async == true));
+
+    const stopBuffer = BufferOnOffStream.pipe(
+      filter(async => async == false),
+      map(x => true)
+    );
+
+    return merge(
+      source.pipe(bufferToggle(startBuffer, () => stopBuffer)),
+      source.pipe(windowToggle(stopBuffer, () => startBuffer))
+    ).pipe(mergeMap(x => x));
+  }
+
+  public static jointGraphContextFactory() {
+    class JointGraphContext extends ObservableContextManager<JointGraphContextType>(DefaultContext) {
+      private static jointPaper: joint.dia.Paper | undefined;
+
+      public static async() {
+        return this._async(this.getContext());
+      }
+
+      // Custom RXJS operator to buffer output while the jointgraph
+      // is in an async context
+      public static bufferWhileAsync<T>(source: Observable<T>): Observable<T> {
+        // Code adapted from https://kddsky.medium.com/pauseable-observables-in-rxjs-58ce2b8c7dfd
+        // Retrieved on 02/06/2022
+
+        const BufferOnOffStream = JointGraphContext.getChangeContextStream().pipe(map(([_, context]) => context.async));
+
+        const startBuffer = BufferOnOffStream.pipe(filter(async => async == true));
+
+        const stopBuffer = BufferOnOffStream.pipe(
+          filter(async => async == false),
+          map(x => true)
+        );
+
+        // Either buffertoggle or windowtoggle must be signalled to start first.
+        // Afterwards, they will start when the other stops.
+        // see Code adapted citation for more info.
+        let startBuffer_BT, stopBuffer_WT: Observable<boolean>;
+        if (JointGraphContext.async() == true) {
+          startBuffer_BT = startBuffer.pipe(startWith(true));
+          stopBuffer_WT = stopBuffer;
+        } else {
+          startBuffer_BT = startBuffer;
+          stopBuffer_WT = stopBuffer.pipe(startWith(true));
+        }
+
+        return merge(
+          source.pipe(bufferToggle(startBuffer_BT, () => stopBuffer)),
+          source.pipe(windowToggle(stopBuffer_WT, () => startBuffer))
+        ).pipe(mergeMap(x => x));
+      }
+
+      public static attachPaper(jointPaper: joint.dia.Paper) {
+        this.jointPaper = jointPaper;
+        this.jointPaper.options.async = this.async();
+      }
+
+      protected static enter(context: JointGraphContextType): void {
+        super.enter(context);
+        if (this.jointPaper !== undefined) {
+          this.jointPaper.options.async = this.async();
+        }
+      }
+
+      protected static exit(): void {
+        if (this.jointPaper !== undefined) {
+          const CURRENT_ASYNC_MODE = this._async(this.getContext());
+          const NEW_ASYNC_MODE = this._async(this.prevContext());
+
+          this.jointPaper.options.async = NEW_ASYNC_MODE;
+          if (CURRENT_ASYNC_MODE == true && NEW_ASYNC_MODE == false) this.jointPaper.updateViews();
+        }
+        super.exit();
+      }
+
+      private static _async(context: JointGraphContextType) {
+        return context.async;
+      }
+    }
+
+    return JointGraphContext;
   }
 }

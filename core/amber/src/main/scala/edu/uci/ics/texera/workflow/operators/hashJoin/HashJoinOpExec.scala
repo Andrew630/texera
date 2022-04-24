@@ -23,18 +23,20 @@ class HashJoinOpExec[K](
   val probeSchema: Schema = operatorSchemaInfo.inputSchemas(1)
   var isBuildTableFinished: Boolean = false
   var buildTableHashMap: mutable.HashMap[K, (ArrayBuffer[Tuple], Boolean)] = _
-  var outputProbeSchema: Schema = operatorSchemaInfo.outputSchema
+  var outputSchema: Schema = operatorSchemaInfo.outputSchemas(0)
 
   var currentEntry: Iterator[Tuple] = _
   var currentTuple: Tuple = _
 
-  def getBuildHashTable(): ArrayBuffer[mutable.HashMap[K, ArrayBuffer[Tuple]]] = {
+  val buildTableTransferBatchSize = 4000
+
+  def getBuildHashTableBatches(): ArrayBuffer[mutable.HashMap[K, ArrayBuffer[Tuple]]] = {
     val sendingMap = new ArrayBuffer[mutable.HashMap[K, ArrayBuffer[Tuple]]]
     var count = 1
     var curr = new mutable.HashMap[K, ArrayBuffer[Tuple]]
     for ((key, tuples) <- buildTableHashMap) {
       curr.put(key, tuples._1)
-      if (count % 4000 == 0) {
+      if (count % buildTableTransferBatchSize == 0) {
         sendingMap.append(curr)
         curr = new mutable.HashMap[K, ArrayBuffer[Tuple]]
       }
@@ -44,11 +46,22 @@ class HashJoinOpExec[K](
     sendingMap
   }
 
-  def mergeIntoHashTable(additionalTable: mutable.HashMap[Any, ArrayBuffer[Tuple]]): Unit = {
-    for ((key, tuples) <- additionalTable) {
-      val (storedTuples, _) =
-        buildTableHashMap.getOrElseUpdate(key.asInstanceOf[K], (new ArrayBuffer[Tuple](), false))
-      storedTuples.appendAll(tuples)
+  /**
+    * This function does not handle duplicates. It merges whatever it is given. It will treat
+    * duplicate tuples of the key as new tuples and will append it. The responsibility to not send
+    * duplicates is with the senders.
+    */
+  def mergeIntoHashTable(additionalTable: mutable.HashMap[Any, ArrayBuffer[Tuple]]): Boolean = {
+    try {
+      for ((key, tuples) <- additionalTable) {
+        val (storedTuples, _) =
+          buildTableHashMap.getOrElseUpdate(key.asInstanceOf[K], (new ArrayBuffer[Tuple](), false))
+        storedTuples.appendAll(tuples)
+      }
+      true
+    } catch {
+      case exception: Exception =>
+        false
     }
   }
 
@@ -112,7 +125,7 @@ class HashJoinOpExec[K](
           tuples
             .map((tuple: Tuple) => {
               // creates a builder
-              val builder = Tuple.newBuilder(operatorSchemaInfo.outputSchema)
+              val builder = Tuple.newBuilder(outputSchema)
 
               // fill the probe tuple attributes as null, since no match
               fillNonJoinFields(
@@ -144,7 +157,7 @@ class HashJoinOpExec[K](
       .map(buildTuple => {
         // creates a builder with the build tuple filled
         val builder = Tuple
-          .newBuilder(operatorSchemaInfo.outputSchema)
+          .newBuilder(outputSchema)
           .add(buildTuple)
 
         // append the probe tuple
@@ -191,7 +204,7 @@ class HashJoinOpExec[K](
 
   private def performRightAntiJoin(tuple: Tuple): Iterator[Tuple] = {
     // creates a builder
-    val builder = Tuple.newBuilder(operatorSchemaInfo.outputSchema)
+    val builder = Tuple.newBuilder(outputSchema)
 
     // fill the build tuple attributes as null, since no match
     fillNonJoinFields(

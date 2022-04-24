@@ -4,6 +4,7 @@ package edu.uci.ics.texera.workflow.operators.expensiveML;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonPropertyDescription;
 import com.google.common.base.Preconditions;
+import edu.uci.ics.amber.engine.common.Constants;
 import edu.uci.ics.texera.workflow.common.metadata.InputPort;
 import edu.uci.ics.texera.workflow.common.metadata.OperatorGroupConstants;
 import edu.uci.ics.texera.workflow.common.metadata.OperatorInfo;
@@ -14,6 +15,7 @@ import edu.uci.ics.texera.workflow.common.operators.map.MapOpDesc;
 import edu.uci.ics.texera.workflow.common.tuple.schema.AttributeType;
 import edu.uci.ics.texera.workflow.common.tuple.schema.OperatorSchemaInfo;
 import edu.uci.ics.texera.workflow.common.tuple.schema.Schema;
+import scala.collection.mutable.HashMap;
 
 import static java.util.Collections.singletonList;
 import static scala.collection.JavaConverters.asScalaBuffer;
@@ -34,7 +36,7 @@ public class ExpensiveMLOpDesc extends MapOpDesc {
         if (attribute == null) {
             throw new RuntimeException("sentiment analysis: attribute is null");
         }
-        return new OneToOneOpExecConfig(operatorIdentifier(), worker -> new ExpensiveMLOpExec(this, operatorSchemaInfo));
+        return new OneToOneOpExecConfig(operatorIdentifier(), worker -> new ExpensiveMLOpExec(this, operatorSchemaInfo), Constants.currentWorkerNum(), new HashMap<Object, Object>());
     }
 
     @Override

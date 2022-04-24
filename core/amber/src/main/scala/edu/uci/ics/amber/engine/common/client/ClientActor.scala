@@ -1,6 +1,7 @@
 package edu.uci.ics.amber.engine.common.client
 
 import akka.actor.{Actor, ActorRef}
+import com.twitter.util.Promise
 import edu.uci.ics.amber.engine.architecture.controller.{Controller, ControllerConfig, Workflow}
 import edu.uci.ics.amber.engine.architecture.messaginglayer.NetworkCommunicationActor.{
   NetworkAck,
@@ -9,6 +10,7 @@ import edu.uci.ics.amber.engine.architecture.messaginglayer.NetworkCommunication
 import edu.uci.ics.amber.engine.common.ambermessage.WorkflowControlMessage
 import edu.uci.ics.amber.engine.common.client.ClientActor.{
   ClosureRequest,
+  CommandRequest,
   InitializeRequest,
   ObservableRequest
 }
@@ -16,25 +18,27 @@ import edu.uci.ics.amber.engine.common.rpc.AsyncRPCClient.{ControlInvocation, Re
 import edu.uci.ics.amber.engine.common.rpc.AsyncRPCServer.ControlCommand
 
 import scala.collection.mutable
+import scala.util.Success
 
 // TODO: Rename or refactor it since it has mixed duties (send/receive messages, execute callbacks)
 private[client] object ClientActor {
   case class InitializeRequest(workflow: Workflow, controllerConfig: ControllerConfig)
   case class ObservableRequest(pf: PartialFunction[Any, Unit])
   case class ClosureRequest[T](closure: () => T)
+  case class CommandRequest(command: ControlCommand[_], promise: Promise[Any])
 }
 
 private[client] class ClientActor extends Actor {
   var controller: ActorRef = _
   var controlId = 0L
-  val senderMap = new mutable.LongMap[ActorRef]()
+  val promiseMap = new mutable.LongMap[Promise[Any]]()
   var handlers: PartialFunction[Any, Unit] = PartialFunction.empty
 
   override def receive: Receive = {
     case InitializeRequest(workflow, controllerConfig) =>
       assert(controller == null)
       controller = context.actorOf(Controller.props(workflow, controllerConfig))
-      sender ! ()
+      sender ! Unit
     case ClosureRequest(closure) =>
       try {
         sender ! closure()
@@ -42,9 +46,9 @@ private[client] class ClientActor extends Actor {
         case e: Throwable =>
           sender ! e
       }
-    case controlCommand: ControlCommand[_] =>
-      controller ! ControlInvocation(controlId, controlCommand)
-      senderMap(controlId) = sender
+    case commandRequest: CommandRequest =>
+      controller ! ControlInvocation(controlId, commandRequest.command)
+      promiseMap(controlId) = commandRequest.promise
       controlId += 1
     case req: ObservableRequest =>
       handlers = req.pf orElse handlers
@@ -57,9 +61,14 @@ private[client] class ClientActor extends Actor {
       if (handlers.isDefinedAt(controlReturn)) {
         handlers(controlReturn)
       }
-      if (senderMap.contains(originalCommandID)) {
-        senderMap(originalCommandID) ! controlReturn
-        senderMap.remove(originalCommandID)
+      if (promiseMap.contains(originalCommandID)) {
+        controlReturn match {
+          case t: Throwable =>
+            promiseMap(originalCommandID).setException(t)
+          case other =>
+            promiseMap(originalCommandID).setValue(other)
+        }
+        promiseMap.remove(originalCommandID)
       }
     case NetworkMessage(mId, _ @WorkflowControlMessage(_, _, _ @ControlInvocation(_, command))) =>
       sender ! NetworkAck(mId)

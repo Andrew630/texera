@@ -1,26 +1,30 @@
 package edu.uci.ics.texera.web.service
 
+import akka.actor.Cancellable
 import com.fasterxml.jackson.annotation.{JsonTypeInfo, JsonTypeName}
 import com.fasterxml.jackson.databind.node.ObjectNode
 import edu.uci.ics.amber.engine.architecture.controller.ControllerEvent.WorkflowCompleted
+import edu.uci.ics.amber.engine.architecture.controller.promisehandlers.FatalErrorHandler.FatalError
 import edu.uci.ics.amber.engine.common.AmberUtils
 import edu.uci.ics.amber.engine.common.client.AmberClient
 import edu.uci.ics.amber.engine.common.tuple.ITuple
-import edu.uci.ics.texera.web.{SnapshotMulticast, TexeraWebApplication}
-import edu.uci.ics.texera.web.model.websocket.event.WorkflowAvailableResultEvent.OperatorAvailableResult
 import edu.uci.ics.texera.web.model.websocket.event.{
   PaginatedResultEvent,
   TexeraWebSocketEvent,
-  WebResultUpdateEvent,
-  WorkflowAvailableResultEvent
+  WebResultUpdateEvent
 }
 import edu.uci.ics.texera.web.model.websocket.request.ResultPaginationRequest
-import edu.uci.ics.texera.workflow.common.operators.OperatorDescriptor
+import edu.uci.ics.texera.web.service.JobResultService.WebResultUpdate
+import edu.uci.ics.texera.web.storage.{JobStateStore, WorkflowStateStore}
+import edu.uci.ics.texera.web.workflowresultstate.OperatorResultMetadata
+import edu.uci.ics.texera.web.workflowruntimestate.JobMetadataStore
+import edu.uci.ics.texera.web.workflowruntimestate.WorkflowAggregatedState.RUNNING
+import edu.uci.ics.texera.web.{SubscriptionManager, TexeraWebApplication}
 import edu.uci.ics.texera.workflow.common.storage.OpResultStorage
 import edu.uci.ics.texera.workflow.common.tuple.Tuple
-import edu.uci.ics.texera.workflow.common.workflow.{WorkflowCompiler, WorkflowInfo}
+import edu.uci.ics.texera.workflow.common.workflow.WorkflowInfo
 import edu.uci.ics.texera.workflow.operators.sink.managed.ProgressiveSinkOpDesc
-import rx.lang.scala.Observer
+import edu.uci.ics.texera.workflow.operators.source.cache.CacheSourceOpDesc
 
 import scala.collection.mutable
 import scala.concurrent.duration.DurationInt
@@ -113,45 +117,118 @@ object JobResultService {
   *  - send result update event to the frontend
   */
 class JobResultService(
-    workflowInfo: WorkflowInfo,
-    client: AmberClient,
-    opResultStorage: OpResultStorage
-) extends SnapshotMulticast[TexeraWebSocketEvent] {
+    val opResultStorage: OpResultStorage,
+    val workflowStateStore: WorkflowStateStore
+) extends SubscriptionManager {
 
   var progressiveResults: mutable.HashMap[String, ProgressiveResultService] =
     mutable.HashMap[String, ProgressiveResultService]()
-  var availableResultMap: Map[String, OperatorAvailableResult] = Map.empty
   private val resultPullingFrequency =
     AmberUtils.amberConfig.getInt("web-server.workflow-result-pulling-in-seconds")
+  private var resultUpdateCancellable: Cancellable = _
 
-  private val resultUpdateCancellable = TexeraWebApplication
-    .scheduleRecurringCallThroughActorSystem(2.seconds, resultPullingFrequency.seconds) {
-      onResultUpdate()
+  def attachToJob(
+      stateStore: JobStateStore,
+      workflowInfo: WorkflowInfo,
+      client: AmberClient
+  ): Unit = {
+
+    if (resultUpdateCancellable != null && !resultUpdateCancellable.isCancelled) {
+      resultUpdateCancellable.cancel()
     }
 
-  client
-    .getObservable[WorkflowCompleted]
-    .onTerminateDetach
-    .subscribe(evt => {
-      if (resultUpdateCancellable.cancel() || resultUpdateCancellable.isCancelled) {
-        // immediately perform final update
-        onResultUpdate()
+    unsubscribeAll()
+
+    addSubscription(stateStore.jobMetadataStore.getStateObservable.subscribe {
+      newState: JobMetadataStore =>
+        {
+          if (newState.state == RUNNING) {
+            if (resultUpdateCancellable == null || resultUpdateCancellable.isCancelled) {
+              resultUpdateCancellable = TexeraWebApplication
+                .scheduleRecurringCallThroughActorSystem(
+                  2.seconds,
+                  resultPullingFrequency.seconds
+                ) {
+                  onResultUpdate()
+                }
+            }
+          } else {
+            if (resultUpdateCancellable != null) resultUpdateCancellable.cancel()
+          }
+        }
+    })
+
+    addSubscription(
+      client
+        .registerCallback[WorkflowCompleted](_ => {
+          if (resultUpdateCancellable.cancel() || resultUpdateCancellable.isCancelled) {
+            // immediately perform final update
+            onResultUpdate()
+          }
+        })
+    )
+
+    addSubscription(
+      client.registerCallback[FatalError](_ =>
+        if (resultUpdateCancellable != null) {
+          resultUpdateCancellable.cancel()
+        }
+      )
+    )
+
+    addSubscription(
+      workflowStateStore.resultStore.registerDiffHandler((oldState, newState) => {
+        val buf = mutable.HashMap[String, WebResultUpdate]()
+        newState.operatorInfo.foreach {
+          case (opId, info) =>
+            val oldInfo = oldState.operatorInfo.getOrElse(opId, new OperatorResultMetadata())
+            // TODO: frontend now receives snapshots instead of deltas, we can optimize this
+            // if (oldInfo.tupleCount != info.tupleCount) {
+            buf(opId) =
+              progressiveResults(opId).convertWebResultUpdate(oldInfo.tupleCount, info.tupleCount)
+          //}
+        }
+        Iterable(WebResultUpdateEvent(buf.toMap))
+      })
+    )
+
+    // first clear all the results
+    progressiveResults.clear()
+    workflowStateStore.resultStore.updateState { state =>
+      state.withOperatorInfo(Map.empty)
+    }
+
+    // If we have cache sources, make dummy sink operators for displaying results on the frontend.
+    workflowInfo.toDAG.getSourceOperators.map(source => {
+      workflowInfo.toDAG.getOperator(source) match {
+        case cacheSourceOpDesc: CacheSourceOpDesc =>
+          val dummySink = new ProgressiveSinkOpDesc()
+          dummySink.setStorage(opResultStorage.get(cacheSourceOpDesc.targetSinkStorageId))
+          progressiveResults += (
+            (
+              cacheSourceOpDesc.targetSinkStorageId,
+              new ProgressiveResultService(dummySink)
+            )
+          )
+        case other => //skip
       }
     })
 
-  workflowInfo.toDAG.getSinkOperators.map(sink => {
-    workflowInfo.toDAG.getOperator(sink) match {
-      case sinkOp: ProgressiveSinkOpDesc =>
-        val service = new ProgressiveResultService(sinkOp)
-        sinkOp.getCachedUpstreamId match {
-          case Some(upstreamId) => progressiveResults += ((upstreamId, service))
-          case None             => progressiveResults += ((sink, service))
-        }
-      case other => // skip other non-texera-managed sinks, if any
-    }
-  })
+    // For cached operators and sinks, create result service so that the results can be displayed.
+    workflowInfo.toDAG.getSinkOperators.map(sink => {
+      workflowInfo.toDAG.getOperator(sink) match {
+        case sinkOp: ProgressiveSinkOpDesc =>
+          val service = new ProgressiveResultService(sinkOp)
+          sinkOp.getCachedUpstreamId match {
+            case Some(upstreamId) => progressiveResults += ((upstreamId, service))
+            case None             => progressiveResults += ((sink, service))
+          }
+        case other => // skip other non-texera-managed sinks, if any
+      }
+    })
+  }
 
-  def handleResultPagination(request: ResultPaginationRequest): Unit = {
+  def handleResultPagination(request: ResultPaginationRequest): TexeraWebSocketEvent = {
     // calculate from index (pageIndex starts from 1 instead of 0)
     val from = request.pageSize * (request.pageIndex - 1)
     val opId = request.operatorID
@@ -164,40 +241,16 @@ class JobResultService(
     val mappedResults = paginationIterable
       .map(tuple => tuple.asKeyValuePairJson())
       .toList
-    send(PaginatedResultEvent.apply(request, mappedResults))
+    PaginatedResultEvent.apply(request, mappedResults)
   }
 
   def onResultUpdate(): Unit = {
-    val webUpdateEvent = progressiveResults.map {
-      case (id, service) =>
-        (id, service.convertWebResultUpdate())
-    }.toMap
-
-    // return update event
-    send(WebResultUpdateEvent(webUpdateEvent))
-  }
-
-  def updateAvailableResult(operators: Iterable[OperatorDescriptor]): Unit = {
-    availableResultMap = operators
-      .filter(op => progressiveResults.contains(op.operatorID))
-      .map(op => op.operatorID)
-      .map(id => {
-        (
-          id,
-          OperatorAvailableResult(
-            opResultStorage.contains(id),
-            progressiveResults(id).webOutputMode
-          )
-        )
-      })
-      .toMap
-  }
-
-  override def sendSnapshotTo(observer: Observer[TexeraWebSocketEvent]): Unit = {
-    observer.onNext(WorkflowAvailableResultEvent(availableResultMap))
-    observer.onNext(
-      WebResultUpdateEvent(progressiveResults.map(e => (e._1, e._2.getSnapshot)).toMap)
-    )
+    workflowStateStore.resultStore.updateState { oldState =>
+      oldState.withOperatorInfo(progressiveResults.map {
+        case (id, service) =>
+          (id, OperatorResultMetadata(service.sink.getStorage.getCount.toInt))
+      }.toMap)
+    }
   }
 
 }

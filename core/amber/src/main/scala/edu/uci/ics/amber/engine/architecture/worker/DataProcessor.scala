@@ -21,6 +21,7 @@ import edu.uci.ics.amber.engine.common.{AmberLogging, IOperatorExecutor, InputEx
 import edu.uci.ics.amber.error.ErrorUtils.safely
 
 import java.util.concurrent.{ExecutorService, Executors, Future}
+import scala.collection.mutable
 
 class DataProcessor( // dependencies:
     operator: IOperatorExecutor, // core logic
@@ -59,12 +60,13 @@ class DataProcessor( // dependencies:
   private var lastTime = System.nanoTime()
   private var currentInputTuple: Either[ITuple, InputExhausted] = _
   private var currentInputLink: LinkIdentity = _
-  private var currentOutputIterator: Iterator[ITuple] = _
+  private var currentOutputIterator: Iterator[(ITuple, Option[LinkIdentity])] = _
   private var isCompleted = false
 
   def getOperatorExecutor(): IOperatorExecutor = operator
 
   /** provide API for actor to get stats of this operator
+    *
     * @return (input tuple count, output tuple count)
     */
   def collectStatistics(): (Long, Long, Long) = {
@@ -74,6 +76,7 @@ class DataProcessor( // dependencies:
   }
 
   /** provide API for actor to get current input tuple of this operator
+    *
     * @return current input tuple if it exists
     */
   def getCurrentInputTuple: ITuple = {
@@ -89,17 +92,17 @@ class DataProcessor( // dependencies:
   }
 
   def shutdown(): Unit = {
-    operator.close() // close operator
     dpThread.cancel(true) // interrupt
     dpThreadExecutor.shutdownNow() // destroy thread
   }
 
   /** process currentInputTuple through operator logic.
     * this function is only called by the DP thread
+    *
     * @return an iterator of output tuples
     */
-  private[this] def processInputTuple(): Iterator[ITuple] = {
-    var outputIterator: Iterator[ITuple] = null
+  private[this] def processInputTuple(): Iterator[(ITuple, Option[LinkIdentity])] = {
+    var outputIterator: Iterator[(ITuple, Option[LinkIdentity])] = null
     try {
       outputIterator = operator.processTuple(currentInputTuple, currentInputLink)
       if (currentInputTuple.isLeft) {
@@ -117,31 +120,33 @@ class DataProcessor( // dependencies:
     * this function is only called by the DP thread
     */
   private[this] def outputOneTuple(): Unit = {
-    var outputTuple: ITuple = null
+    var out: (ITuple, Option[LinkIdentity]) = null
     try {
-      outputTuple = currentOutputIterator.next
+      out = currentOutputIterator.next
     } catch safely {
       case e =>
         // invalidate current output tuple
-        outputTuple = null
+        out = null
         // also invalidate outputIterator
         currentOutputIterator = null
         // forward input tuple to the user and pause DP thread
         handleOperatorException(e)
     }
-    if (outputTuple != null) {
-      if (breakpointManager.evaluateTuple(outputTuple)) {
-        pauseManager.pause()
-        disableDataQueue()
-        stateManager.transitTo(PAUSED)
-      } else {
-        outputTupleCount += 1
-        batchProducer.passTupleToDownstream(outputTuple)
-      }
+    if (out == null) return
+
+    val (outputTuple, outputPortOpt) = out
+    if (breakpointManager.evaluateTuple(outputTuple)) {
+      pauseManager.pause()
+      disableDataQueue()
+      stateManager.transitTo(PAUSED)
+    } else {
+      outputTupleCount += 1
+      batchProducer.passTupleToDownstream(outputTuple, outputPortOpt)
     }
   }
 
   /** Provide main functionality of data processing
+    *
     * @throws Exception (from engine code only)
     */
   @throws[Exception]
@@ -171,9 +176,10 @@ class DataProcessor( // dependencies:
     }
     // Send Completed signal to worker actor.
     logger.info(s"$operator completed")
+    disableDataQueue()
+    operator.close() // close operator
     asyncRPCClient.send(WorkerExecutionCompleted(), CONTROLLER)
     stateManager.transitTo(COMPLETED)
-    disableDataQueue()
     processControlCommandsAfterCompletion()
   }
 
@@ -212,7 +218,9 @@ class DataProcessor( // dependencies:
     }
   }
 
-  private[this] def outputAvailable(outputIterator: Iterator[ITuple]): Boolean = {
+  private[this] def outputAvailable(
+      outputIterator: Iterator[(ITuple, Option[LinkIdentity])]
+  ): Boolean = {
     try {
       outputIterator != null && outputIterator.hasNext
     } catch safely {
