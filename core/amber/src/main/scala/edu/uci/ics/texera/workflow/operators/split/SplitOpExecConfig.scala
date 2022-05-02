@@ -21,7 +21,7 @@ import edu.uci.ics.texera.workflow.common.tuple.schema.OperatorSchemaInfo
 
 class SplitOpExecConfig(
     id: OperatorIdentity,
-    splitOpDesc: SplitOpDesc
+    splitOpDesc: RandomSplitOpDesc
 ) extends OpExecConfig(id) {
 
   override lazy val topology: Topology = {
@@ -29,7 +29,7 @@ class SplitOpExecConfig(
       Array(
         new WorkerLayer(
           makeLayer(id, "main"),
-          i => new SplitOpExec(i, splitOpDesc, outputToOrdinalMapping),
+          i => new RandomSplitOpExec(i, splitOpDesc, outputToOrdinalMapping),
           Constants.currentWorkerNum,
           FollowPrevious(),
           RoundRobinDeployment()

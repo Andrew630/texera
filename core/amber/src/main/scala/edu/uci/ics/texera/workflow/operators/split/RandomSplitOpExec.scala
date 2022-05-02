@@ -9,10 +9,10 @@ import edu.uci.ics.texera.workflow.common.tuple.Tuple
 import scala.collection.mutable
 import scala.util.Random
 
-class SplitOpExec(
-    val actor: Int,
-    val opDesc: SplitOpDesc,
-    val outputMapping: mutable.HashMap[LinkIdentity, (Int, String)]
+class RandomSplitOpExec(
+                   val actor: Int,
+                   val opDesc: RandomSplitOpDesc,
+                   val outputMapping: mutable.HashMap[LinkIdentity, (Int, String)]
 ) extends OperatorExecutor {
 
   val outputLinkMapping: Map[String, LinkIdentity] =

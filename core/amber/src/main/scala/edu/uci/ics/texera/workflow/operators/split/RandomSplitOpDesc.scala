@@ -4,22 +4,20 @@ import com.fasterxml.jackson.annotation.{JsonIgnore, JsonProperty, JsonPropertyD
 import com.google.common.base.Preconditions
 import edu.uci.ics.amber.engine.common.Constants
 import edu.uci.ics.amber.engine.operators.OpExecConfig
-import edu.uci.ics.texera.workflow.common.metadata.{
-  InputPort,
-  OperatorGroupConstants,
-  OperatorInfo,
-  OutputPort
-}
+import edu.uci.ics.texera.workflow.common.metadata.{InputPort, OperatorGroupConstants, OperatorInfo, OutputPort}
 import edu.uci.ics.texera.workflow.common.operators.OperatorDescriptor
 import edu.uci.ics.texera.workflow.common.tuple.schema.{OperatorSchemaInfo, Schema}
 
+import javax.validation.constraints.{Max, Min}
 import scala.util.Random
 
-class SplitOpDesc extends OperatorDescriptor {
+class RandomSplitOpDesc extends OperatorDescriptor {
 
-  @JsonProperty(value = "training percentage", required = false, defaultValue = "80")
-  @JsonPropertyDescription("percentage of training split data (default 80%)")
-  var k: Int = 80
+  @JsonProperty(value = "out1Percentage", required = true)
+  @JsonPropertyDescription("percentage of split data on first output")
+  @Min(0)
+  @Max(100)
+  var k: Int = 0
 
   // Store random seeds for each executor to satisfy the fault tolerance requirement.
   @JsonIgnore
@@ -31,11 +29,11 @@ class SplitOpDesc extends OperatorDescriptor {
 
   override def operatorInfo: OperatorInfo = {
     OperatorInfo(
-      userFriendlyName = "Training/Testing Split",
-      operatorDescription = "Split training and testing data to two different ports",
+      userFriendlyName = "Random Split",
+      operatorDescription = "Randomly split data to two subsets",
       operatorGroupName = OperatorGroupConstants.UTILITY_GROUP,
       inputPorts = List(InputPort()),
-      outputPorts = List(OutputPort("training"), OutputPort("testing"))
+      outputPorts = List(OutputPort("out1"), OutputPort("out2"))
     )
   }
 

@@ -49,7 +49,7 @@ import org.apache.commons.lang3.builder.{EqualsBuilder, HashCodeBuilder, ToStrin
 
 import java.util.UUID
 import edu.uci.ics.texera.workflow.operators.sink.managed.ProgressiveSinkOpDesc
-import edu.uci.ics.texera.workflow.operators.split.SplitOpDesc
+import edu.uci.ics.texera.workflow.operators.split.RandomSplitOpDesc
 
 @JsonTypeInfo(
   use = JsonTypeInfo.Id.NAME,
@@ -67,7 +67,7 @@ import edu.uci.ics.texera.workflow.operators.split.SplitOpDesc
       name = "TwitterFullArchiveSearch"
     ),
     new Type(value = classOf[ProgressiveSinkOpDesc], name = "SimpleSink"),
-    new Type(value = classOf[SplitOpDesc], name = "Split"),
+    new Type(value = classOf[RandomSplitOpDesc], name = "Split"),
     new Type(value = classOf[RegexOpDesc], name = "Regex"),
     new Type(value = classOf[SpecializedFilterOpDesc], name = "Filter"),
     new Type(value = classOf[SentimentAnalysisOpDesc], name = "SentimentAnalysis"),
