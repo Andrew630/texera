@@ -30,7 +30,7 @@ object WorkerInternalQueue {
   case class SenderChangeMarker(newUpstreamLink: LinkIdentity) extends InternalQueueElement
 
   case class ControlElement(payload: ControlPayload, from: ActorVirtualIdentity)
-    extends InternalQueueElement
+      extends InternalQueueElement
 
   case object EndMarker extends InternalQueueElement
 
@@ -100,7 +100,7 @@ trait WorkerInternalQueue {
       case InputTuple(from, _) =>
         if (!inputToCredits.contains(from)) {
           throw new WorkflowRuntimeException(
-            s"Sender of tuple being dequeued is not registered for credits $from"
+            s"Sender $from of tuple being dequeued is not registered for credits"
           )
         }
         inputToCredits(from) = inputToCredits(from) + 1
