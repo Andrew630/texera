@@ -56,19 +56,33 @@ trait WorkerInternalQueue {
   private var inputToCredits = new mutable.HashMap[ActorVirtualIdentity, Int]()
 
   def getSenderCredits(sender: ActorVirtualIdentity): Int = {
-    inputToCredits.getOrElseUpdate(
-      sender,
-      Constants.unprocessedBatchesCreditLimitPerSender * Constants.defaultBatchSize
-    ) / Constants.defaultBatchSize
+    if (sender.toString().contains("Scan")) {
+      inputToCredits.getOrElseUpdate(
+        sender,
+        Constants.unprocessedBatchesCreditLimitPerSender * Constants.defaultBatchSize
+      ) / Constants.defaultBatchSize
+    } else {
+      inputToCredits.getOrElseUpdate(
+        sender,
+        Constants.unprocessedBatchesCreditLimitPerSender * Constants.defaultBatchSize
+      ) / Constants.defaultBatchSize
+    }
   }
 
   def appendElement(elem: InternalQueueElement): Unit = {
     elem match {
       case InputTuple(from, _) =>
-        inputToCredits(from) = inputToCredits.getOrElseUpdate(
-          from,
-          Constants.unprocessedBatchesCreditLimitPerSender * Constants.defaultBatchSize
-        ) - 1
+        if (from.toString().contains("Scan")) {
+          inputToCredits(from) = inputToCredits.getOrElseUpdate(
+            from,
+            Constants.unprocessedBatchesCreditLimitPerSender * Constants.defaultBatchSize
+          ) - 1
+        } else {
+          inputToCredits(from) = inputToCredits.getOrElseUpdate(
+            from,
+            Constants.unprocessedBatchesCreditLimitPerSender * Constants.defaultBatchSize
+          ) - 1
+        }
       case _ =>
       // do nothing
     }

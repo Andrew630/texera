@@ -133,11 +133,19 @@ class NetworkCommunicationActor(parentRef: ActorRef, val actorId: ActorVirtualId
       msg: WorkflowMessage
   ): Unit = {
     if (msg.msgType == WorkflowMessageType.DATA_MESSAGE) {
-      flowControl.receiverIdToCredits(receiverId) =
-        flowControl.receiverIdToCredits.getOrElseUpdate(
-          receiverId,
-          Constants.unprocessedBatchesCreditLimitPerSender
-        ) - 1
+      if (actorId.toString().contains("Scan")) {
+        flowControl.receiverIdToCredits(receiverId) =
+          flowControl.receiverIdToCredits.getOrElseUpdate(
+            receiverId,
+            Constants.unprocessedBatchesCreditLimitPerSender
+          ) - 1
+      } else {
+        flowControl.receiverIdToCredits(receiverId) =
+          flowControl.receiverIdToCredits.getOrElseUpdate(
+            receiverId,
+            Constants.unprocessedBatchesCreditLimitPerSender
+          ) - 1
+      }
     }
   }
 
