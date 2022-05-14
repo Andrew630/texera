@@ -21,6 +21,8 @@ object Constants {
 
   val gcpExp = true
   val sortExperiment = false
+  
+  // monitoring and reshape related
   var monitoringEnabled: Boolean =
     AmberUtils.amberConfig.getBoolean("monitoring.monitoring-enabled")
   var monitoringIntervalInMs: Int =
@@ -47,4 +49,16 @@ object Constants {
     AmberUtils.amberConfig.getInt("reshape.first-phase-sharing-numerator")
   var reshapeFirstPhaseSharingDenominator: Int =
     AmberUtils.amberConfig.getInt("reshape.first-phase-sharing-denominator")
+
+  // flow control related
+  var flowControlEnabled: Boolean =
+    AmberUtils.amberConfig.getBoolean("flow-control.credit-based-flow-control-enabled")
+  var unprocessedBatchesCreditLimitPerSender: Int =
+    AmberUtils.amberConfig.getInt("flow-control.unprocessed-batches-limit-per-worker-pair")
+  var localSendingBufferLimitPerReceiver: Int =
+    AmberUtils.amberConfig.getInt("flow-control.local-sending-buffer-limit-per-receiver")
+  var creditPollingInitialDelayInMs: Int =
+    AmberUtils.amberConfig.getInt("flow-control.credit-poll-request-initial-delay-in-ms")
+  var creditPollingIntervalinMs: Int =
+    AmberUtils.amberConfig.getInt("flow-control.credit-poll-request-interval-in-ms")
 }

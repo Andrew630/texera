@@ -50,7 +50,7 @@ class BatchToTupleConverter(workerInternalQueue: WorkerInternalQueue) {
     dataPayload match {
       case DataFrame(payload) =>
         payload.foreach { i =>
-          workerInternalQueue.appendElement(InputTuple(i))
+          workerInternalQueue.appendElement(InputTuple(from, i))
         }
       case EndOfUpstream() =>
         upstreamMap(link).remove(from)
@@ -65,5 +65,14 @@ class BatchToTupleConverter(workerInternalQueue: WorkerInternalQueue) {
         throw new NotImplementedError()
     }
   }
+
+  /**
+    * This method is used by flow control logic. It returns the number of credits available for this particular sender
+    * worker.
+    * @param sender the worker sending the network message
+    * @return
+    */
+  def getSenderCredits(sender: ActorVirtualIdentity): Int =
+    workerInternalQueue.getSenderCredits(sender)
 
 }
