@@ -64,7 +64,7 @@ trait WorkerInternalQueue {
     }
 
     if (sender.toString().contains("Scan")) {
-      (Constants.unprocessedBatchesCreditLimitPerSender * Constants.defaultBatchSize * 2 - (inputTuplesPutIn
+      (Constants.unprocessedBatchesCreditLimitPerSender * Constants.defaultBatchSize * 4 - (inputTuplesPutIn
         .getOrElseUpdate(sender, 0L) - inputTuplesTakenOut.getOrElseUpdate(
         sender,
         0L
