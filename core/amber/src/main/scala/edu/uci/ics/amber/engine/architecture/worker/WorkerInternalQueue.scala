@@ -53,19 +53,29 @@ trait WorkerInternalQueue {
   private val controlQueue = lbmq.getSubQueue(CONTROL_QUEUE)
 
   // the credits in the `inputToCredits` map are in tuples (not batches)
-  @volatile private var inputToCredits = new mutable.HashMap[ActorVirtualIdentity, Int]()
+  private var inputTuplesPutIn = new mutable.HashMap[ActorVirtualIdentity, Long]()
+  @volatile private var inputTuplesTakenOut = new mutable.HashMap[ActorVirtualIdentity, Long]()
 
   def getSenderCredits(sender: ActorVirtualIdentity): Int = {
+    val x =
+      inputTuplesPutIn.getOrElseUpdate(sender, 0L) - inputTuplesTakenOut.getOrElseUpdate(sender, 0L)
+    if (x < 0) {
+      println(s"\t\t IT's STILL HAPPENING ${x}")
+    }
+
     if (sender.toString().contains("Scan")) {
-      inputToCredits.getOrElseUpdate(
+      (Constants.unprocessedBatchesCreditLimitPerSender * Constants.defaultBatchSize - (inputTuplesPutIn
+        .getOrElseUpdate(sender, 0L) - inputTuplesTakenOut.getOrElseUpdate(
         sender,
-        Constants.unprocessedBatchesCreditLimitPerSender * Constants.defaultBatchSize
-      ) / Constants.defaultBatchSize
+        0L
+      )).toInt) / Constants.defaultBatchSize
+
     } else {
-      inputToCredits.getOrElseUpdate(
+      (Constants.unprocessedBatchesCreditLimitPerSender * Constants.defaultBatchSize - (inputTuplesPutIn
+        .getOrElseUpdate(sender, 0L) - inputTuplesTakenOut.getOrElseUpdate(
         sender,
-        Constants.unprocessedBatchesCreditLimitPerSender * Constants.defaultBatchSize
-      ) / Constants.defaultBatchSize
+        0L
+      )).toInt) / Constants.defaultBatchSize
     }
   }
 
@@ -73,15 +83,9 @@ trait WorkerInternalQueue {
     elem match {
       case InputTuple(from, _) =>
         if (from.toString().contains("Scan")) {
-          inputToCredits(from) = inputToCredits.getOrElseUpdate(
-            from,
-            Constants.unprocessedBatchesCreditLimitPerSender * Constants.defaultBatchSize
-          ) - 1
+          inputTuplesPutIn(from) = inputTuplesPutIn.getOrElseUpdate(from, 0L) + 1
         } else {
-          inputToCredits(from) = inputToCredits.getOrElseUpdate(
-            from,
-            Constants.unprocessedBatchesCreditLimitPerSender * Constants.defaultBatchSize
-          ) - 1
+          inputTuplesPutIn(from) = inputTuplesPutIn.getOrElseUpdate(from, 0L) + 1
         }
 
       case _ =>
@@ -98,13 +102,11 @@ trait WorkerInternalQueue {
     val elem = lbmq.take()
     elem match {
       case InputTuple(from, _) =>
-        if (!inputToCredits.contains(from)) {
-          println(s"\t INPUT to credits map ${inputToCredits.mkString(",\n")}")
-          throw new WorkflowRuntimeException(
-            s"Sender $from of tuple being dequeued is not registered for credits"
-          )
+        if (from.toString().contains("Scan")) {
+          inputTuplesTakenOut(from) = inputTuplesTakenOut.getOrElseUpdate(from, 0L) + 1
+        } else {
+          inputTuplesTakenOut(from) = inputTuplesTakenOut.getOrElseUpdate(from, 0L) + 1
         }
-        inputToCredits(from) = inputToCredits(from) + 1
       case _ =>
       // do nothing
     }
