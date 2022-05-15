@@ -23,7 +23,7 @@ object TexeraRunWorker {
   }
 
   def main(args: Array[String]): Unit = {
-    val argMap = parseArgs(args)
+    //val argMap = parseArgs(args)
     // start actor system worker node
     if (args != null && args.length > 0) {
       AmberUtils.startActorWorker(Option.apply(args(0)))
