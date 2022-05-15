@@ -80,16 +80,18 @@ trait WorkerInternalQueue {
   }
 
   def appendElement(elem: InternalQueueElement): Unit = {
-    elem match {
-      case InputTuple(from, _) =>
-        if (from.toString().contains("Scan")) {
-          inputTuplesPutIn(from) = inputTuplesPutIn.getOrElseUpdate(from, 0L) + 1
-        } else {
-          inputTuplesPutIn(from) = inputTuplesPutIn.getOrElseUpdate(from, 0L) + 1
-        }
+    if (Constants.flowControlEnabled) {
+      elem match {
+        case InputTuple(from, _) =>
+          if (from.toString().contains("Scan")) {
+            inputTuplesPutIn(from) = inputTuplesPutIn.getOrElseUpdate(from, 0L) + 1
+          } else {
+            inputTuplesPutIn(from) = inputTuplesPutIn.getOrElseUpdate(from, 0L) + 1
+          }
 
-      case _ =>
-      // do nothing
+        case _ =>
+        // do nothing
+      }
     }
     dataQueue.add(elem)
   }
@@ -100,15 +102,18 @@ trait WorkerInternalQueue {
 
   def getElement: InternalQueueElement = {
     val elem = lbmq.take()
-    elem match {
-      case InputTuple(from, _) =>
-        if (from.toString().contains("Scan")) {
-          inputTuplesTakenOut(from) = inputTuplesTakenOut.getOrElseUpdate(from, 0L) + 1
-        } else {
-          inputTuplesTakenOut(from) = inputTuplesTakenOut.getOrElseUpdate(from, 0L) + 1
-        }
-      case _ =>
-      // do nothing
+    if (Constants.flowControlEnabled) {
+      elem match {
+        case InputTuple(from, _) =>
+          if (from.toString().contains("Scan")) {
+            inputTuplesTakenOut(from) = inputTuplesTakenOut.getOrElseUpdate(from, 0L) + 1
+          } else {
+            inputTuplesTakenOut(from) = inputTuplesTakenOut.getOrElseUpdate(from, 0L) + 1
+          }
+        case _ =>
+        // do nothing
+
+      }
     }
     elem
   }

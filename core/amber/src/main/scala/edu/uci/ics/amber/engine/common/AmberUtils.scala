@@ -16,9 +16,9 @@ object AmberUtils {
       .groupBy(_._1)
       .mapValues(_.map(_._2).toSet)
 
-  def startActorMaster(localhost: Boolean): ActorSystem = {
+  def startActorMaster(clusterMode: Boolean): ActorSystem = {
     var localIpAddress = "localhost"
-    if (!localhost) {
+    if (!clusterMode) {
       if (!Constants.gcpExp) {
         try {
           val query = new URL("http://checkip.amazonaws.com")
