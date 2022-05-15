@@ -99,6 +99,7 @@ trait WorkerInternalQueue {
     elem match {
       case InputTuple(from, _) =>
         if (!inputToCredits.contains(from)) {
+          println(s"\t INPUT to credits map ${inputToCredits.mkString(",\n")}")
           throw new WorkflowRuntimeException(
             s"Sender $from of tuple being dequeued is not registered for credits"
           )
