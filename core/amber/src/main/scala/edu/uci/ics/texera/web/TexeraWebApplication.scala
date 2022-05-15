@@ -83,9 +83,9 @@ object TexeraWebApplication {
   }
 
   def main(args: Array[String]): Unit = {
-    val argMap = parseArgs(args)
+    // val argMap = parseArgs(args)
 
-    val clusterMode = argMap.get('cluster).asInstanceOf[Option[Boolean]].getOrElse(false)
+    //val clusterMode = argMap.get('cluster).asInstanceOf[Option[Boolean]].getOrElse(false)
 
     // start actor system master node
     if (args != null && args.length > 0 && args(0).trim().toLowerCase() == "false") {
