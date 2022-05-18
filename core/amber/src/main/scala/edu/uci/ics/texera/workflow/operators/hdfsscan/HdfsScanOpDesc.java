@@ -76,6 +76,7 @@ public class HdfsScanOpDesc extends SourceOperatorDescriptor {
             return new HdfsScanOpExecConfig(this.operatorIdentifier(), Constants.currentWorkerNum() - 9, host, hdfsPort, hdfsRestApiPort,
                     filePath, delimiter.charAt(0), idxToKeep, this.inferSchema(headerLine), header != null && header);
         } catch (IOException e) {
+            System.out.println("\tThe exception in HDFS scan operator is " + e.getMessage());
             throw new UncheckedIOException(e);
         }
     }

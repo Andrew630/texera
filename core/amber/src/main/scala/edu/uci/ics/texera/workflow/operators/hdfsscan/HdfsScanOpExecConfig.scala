@@ -38,6 +38,8 @@ class HdfsScanOpExecConfig(
       .getFileStatus(new Path(filePath))
       .getLen
 
+  println(s"\tTOTAL BYTES ARE ${totalBytes}")
+
   override lazy val topology: Topology = {
     new Topology(
       Array(
@@ -66,6 +68,7 @@ class HdfsScanOpExecConfig(
       Array()
     )
   }
+
   override def assignBreakpoint(
       breakpoint: GlobalBreakpoint[_]
   ): Array[ActorVirtualIdentity] = {
