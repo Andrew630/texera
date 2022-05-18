@@ -137,7 +137,7 @@ class NetworkCommunicationActor(parentRef: ActorRef, val actorId: ActorVirtualId
         flowControl.receiverIdToCredits(receiverId) =
           flowControl.receiverIdToCredits.getOrElseUpdate(
             receiverId,
-            Constants.unprocessedBatchesCreditLimitPerSender * 4
+            Constants.unprocessedBatchesCreditLimitPerSender
           ) - 1
       } else {
         flowControl.receiverIdToCredits(receiverId) =
