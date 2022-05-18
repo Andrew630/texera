@@ -134,7 +134,10 @@ class Controller(
         // open all operators
         _ =>
           Future.collect(workflow.getAllWorkers.map { workerID =>
-            asyncRPCClient.send(OpenOperator(), workerID)
+            {
+              println(s"Sending Open worker to ${workerID.toString()}")
+              asyncRPCClient.send(OpenOperator(), workerID)
+            }
           }.toSeq)
       )
       .flatMap(_ =>
