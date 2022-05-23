@@ -71,6 +71,9 @@ val dropwizardDependencies = Seq(
   "commons-io" % "commons-io" % "2.11.0"
 )
 
+// https://mvnrepository.com/artifact/org.apache.commons/commons-csv
+libraryDependencies += "org.apache.commons" % "commons-csv" % "1.9.0"
+
 // deps from library
 //"com.kjetland" % "mbknor-jackson-jsonschema_2.12" % "1.0.39"
 
