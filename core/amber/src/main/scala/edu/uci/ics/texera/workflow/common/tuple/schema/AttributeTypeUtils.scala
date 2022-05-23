@@ -228,12 +228,15 @@ object AttributeTypeUtils extends Serializable {
   def inferSchemaFromRows(fieldsIterator: Iterator[Array[Object]]): Array[AttributeType] = {
     var attributeTypes: Array[AttributeType] = Array()
 
+    var i = 0
     for (fields <- fieldsIterator) {
       if (attributeTypes.isEmpty) {
         attributeTypes = Array.fill[AttributeType](fields.length)(INTEGER)
       }
       inferRow(attributeTypes, fields)
+      i += 1
     }
+    System.out.println(i)
     attributeTypes
   }
 

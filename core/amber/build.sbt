@@ -240,3 +240,6 @@ libraryDependencies += "org.tukaani" % "xz" % "1.5"
 
 // https://mvnrepository.com/artifact/org.jasypt/jasypt
 libraryDependencies += "org.jasypt" % "jasypt" % "1.9.3"
+
+// https://mvnrepository.com/artifact/com.univocity/univocity-parsers
+libraryDependencies += "com.univocity" % "univocity-parsers" % "2.9.1"
