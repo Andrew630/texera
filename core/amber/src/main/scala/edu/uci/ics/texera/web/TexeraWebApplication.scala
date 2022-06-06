@@ -73,7 +73,7 @@ object TexeraWebApplication {
       list match {
         case Nil => map
         case "--masterIp" :: value :: tail =>
-          nextOption(map ++ Map('masterIp -> value.toBoolean), tail)
+          nextOption(map ++ Map('masterIp -> value), tail)
         case option :: tail =>
           throw new InvalidArgumentException("unknown command-line arg")
       }
