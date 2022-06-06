@@ -25,7 +25,7 @@ object TexeraRunWorker {
   def main(args: Array[String]): Unit = {
     val argMap = parseArgs(args)
     // start actor system worker node
-    AmberUtils.startActorWorker(argMap.get('serverAddr).asInstanceOf[Option[String]])
+    AmberUtils.startActorWorker(argMap.get('masterIp).asInstanceOf[Option[String]],argMap.get('workerIp).asInstanceOf[Option[String]])
   }
 
 }

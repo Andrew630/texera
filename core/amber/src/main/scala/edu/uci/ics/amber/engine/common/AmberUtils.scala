@@ -4,9 +4,9 @@ import akka.actor.{ActorSystem, Address, DeadLetter, Props}
 import com.typesafe.config.{Config, ConfigFactory}
 import edu.uci.ics.amber.clustering.ClusterListener
 import edu.uci.ics.amber.engine.architecture.messaginglayer.DeadLetterMonitorActor
+import org.apache.commons.jcs3.access.exception.InvalidArgumentException
 
 import java.io.{BufferedReader, InputStreamReader}
-import java.net.URL
 
 object AmberUtils {
 
@@ -16,26 +16,17 @@ object AmberUtils {
       .groupBy(_._1)
       .mapValues(_.map(_._2).toSet)
 
-  def startActorMaster(clusterMode: Boolean): ActorSystem = {
-    var localIpAddress = "localhost"
-    if (clusterMode) {
-      try {
-        val query = new URL("http://checkip.amazonaws.com")
-        val in = new BufferedReader(new InputStreamReader(query.openStream()))
-        localIpAddress = in.readLine()
-      } catch {
-        case e: Exception => throw e
-      }
-    }
-
+  def startActorMaster(mainNodeAddress: Option[String]): ActorSystem = {
+    val masterIp = mainNodeAddress.getOrElse("localhost")
+    println(s"starting texera master in ${if(mainNodeAddress.isDefined)"cluster" else "local"} mode , ip addr = "+masterIp)
     val masterConfig = ConfigFactory
       .parseString(s"""
         akka.remote.artery.canonical.port = 2552
-        akka.remote.artery.canonical.hostname = $localIpAddress
-        akka.cluster.seed-nodes = [ "akka://Amber@$localIpAddress:2552" ]
+        akka.remote.artery.canonical.hostname = $masterIp
+        akka.cluster.seed-nodes = [ "akka://Amber@$masterIp:2552" ]
         """)
       .withFallback(akkaConfig)
-    Constants.masterNodeAddr = createMasterAddress(localIpAddress)
+    Constants.masterNodeAddr = createMasterAddress(masterIp)
     createAmberSystem(masterConfig)
   }
 
@@ -45,26 +36,20 @@ object AmberUtils {
 
   def createMasterAddress(addr: String): Address = Address("akka", "Amber", addr, 2552)
 
-  def startActorWorker(mainNodeAddress: Option[String]): ActorSystem = {
-    val addr = mainNodeAddress.getOrElse("localhost")
-    var localIpAddress = "localhost"
-    if (mainNodeAddress.isDefined) {
-      try {
-        val query = new URL("http://checkip.amazonaws.com")
-        val in = new BufferedReader(new InputStreamReader(query.openStream()))
-        localIpAddress = in.readLine()
-      } catch {
-        case e: Exception => throw e
-      }
+  def startActorWorker(mainNodeAddress: Option[String], workerNodeAddress: Option[String]): ActorSystem = {
+    val masterIp = mainNodeAddress.getOrElse("localhost")
+    var workerIp = workerNodeAddress.getOrElse("localhost")
+    if(mainNodeAddress.isDefined != workerNodeAddress.isDefined){
+      throw new InvalidArgumentException("cluster mode require both main node and worker ip addresses")
     }
     val workerConfig = ConfigFactory
       .parseString(s"""
-        akka.remote.artery.canonical.hostname = $localIpAddress
+        akka.remote.artery.canonical.hostname = $workerIp
         akka.remote.artery.canonical.port = 0
-        akka.cluster.seed-nodes = [ "akka://Amber@$addr:2552" ]
+        akka.cluster.seed-nodes = [ "akka://Amber@$masterIp:2552" ]
         """)
       .withFallback(akkaConfig)
-    Constants.masterNodeAddr = createMasterAddress(addr)
+    Constants.masterNodeAddr = createMasterAddress(masterIp)
     createAmberSystem(workerConfig)
   }
 

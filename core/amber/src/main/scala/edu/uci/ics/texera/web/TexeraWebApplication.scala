@@ -85,10 +85,10 @@ object TexeraWebApplication {
   def main(args: Array[String]): Unit = {
     val argMap = parseArgs(args)
 
-    val clusterMode = argMap.get('cluster).asInstanceOf[Option[Boolean]].getOrElse(false)
+    val masterIp = argMap.get('masterIp).asInstanceOf[Option[String]]
 
     // start actor system master node
-    actorSystem = AmberUtils.startActorMaster(clusterMode)
+    actorSystem = AmberUtils.startActorMaster(masterIp)
 
     // start web server
     new TexeraWebApplication().run(
