@@ -72,8 +72,8 @@ object TexeraWebApplication {
     def nextOption(map: OptionMap, list: List[String]): OptionMap = {
       list match {
         case Nil => map
-        case "--cluster" :: value :: tail =>
-          nextOption(map ++ Map('cluster -> value.toBoolean), tail)
+        case "--masterIp" :: value :: tail =>
+          nextOption(map ++ Map('masterIp -> value.toBoolean), tail)
         case option :: tail =>
           throw new InvalidArgumentException("unknown command-line arg")
       }

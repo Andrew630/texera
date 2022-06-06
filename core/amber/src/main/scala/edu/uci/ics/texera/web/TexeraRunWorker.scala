@@ -13,8 +13,10 @@ object TexeraRunWorker {
     def nextOption(map: OptionMap, list: List[String]): OptionMap = {
       list match {
         case Nil => map
-        case "--serverAddr" :: value :: tail =>
-          nextOption(map ++ Map('serverAddr -> value), tail)
+        case "--masterIp" :: value :: tail =>
+          nextOption(map ++ Map('masterIp -> value), tail)
+        case "--workerIp" :: value :: tail =>
+          nextOption(map ++ Map('workerIp -> value), tail)
         case option :: tail =>
           throw new InvalidArgumentException("unknown command-line arg")
       }
