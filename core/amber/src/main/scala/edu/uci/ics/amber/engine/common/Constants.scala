@@ -19,9 +19,9 @@ object Constants {
   var masterNodeAddr: Address = Address("akka", "Amber", "localhost", 2552)
   var defaultTau: FiniteDuration = 10.milliseconds
 
-  val gcpExp = true
+  val gcpExp = false
   val sortExperiment = false
-  
+
   // monitoring and reshape related
   var monitoringEnabled: Boolean =
     AmberUtils.amberConfig.getBoolean("monitoring.monitoring-enabled")

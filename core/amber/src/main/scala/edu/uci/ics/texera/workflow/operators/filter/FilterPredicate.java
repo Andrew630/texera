@@ -121,7 +121,7 @@ public class FilterPredicate {
         int compareResult = tupleValue.compareTo(userSuppliedValue);
         List<String> words = Arrays.asList("asaa", "sdsdsa", "dsdsds", "qwddw", "sdcdwdc", "dacadca", "asdacadca");
         int count = 0;
-        for (int i = 0; i < 120; i++) {
+        for (int i = 0; i < 20; i++) {
             for (int j = 0; j < words.size(); j++) {
                 if (words.get(j).contains(tupleValue.toString() + Integer.toString(i))) {
                     count++;

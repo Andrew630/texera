@@ -24,16 +24,16 @@ import java.util.concurrent.{ExecutorService, Executors, Future}
 import scala.collection.mutable
 
 class DataProcessor( // dependencies:
-    operator: IOperatorExecutor, // core logic
-    asyncRPCClient: AsyncRPCClient, // to send controls
-    batchProducer: TupleToBatchConverter, // to send output tuples
-    pauseManager: PauseManager, // to pause/resume
-    breakpointManager: BreakpointManager, // to evaluate breakpoints
-    stateManager: WorkerStateManager,
-    asyncRPCServer: AsyncRPCServer,
-    val actorId: ActorVirtualIdentity
-) extends WorkerInternalQueue
-    with AmberLogging {
+                     operator: IOperatorExecutor, // core logic
+                     asyncRPCClient: AsyncRPCClient, // to send controls
+                     batchProducer: TupleToBatchConverter, // to send output tuples
+                     pauseManager: PauseManager, // to pause/resume
+                     breakpointManager: BreakpointManager, // to evaluate breakpoints
+                     stateManager: WorkerStateManager,
+                     asyncRPCServer: AsyncRPCServer,
+                     val actorId: ActorVirtualIdentity
+                   ) extends WorkerInternalQueue
+  with AmberLogging {
   // initialize dp thread upon construction
   private val dpThreadExecutor: ExecutorService = Executors.newSingleThreadExecutor
   private val dpThread: Future[_] = dpThreadExecutor.submit(new Runnable() {
@@ -146,24 +146,19 @@ class DataProcessor( // dependencies:
     }
   }
 
-  /** Provide main functionality of data processing
-    *
-    * @throws Exception (from engine code only)
-    */
-  @throws[Exception]
-  private[this] def runDPThreadMainLogic(): Unit = {
+  private[this] def runDPThreadMainLogicForScan(): Unit = {
     // main DP loop
     while (!isCompleted) {
       // take the next data element from internal queue, blocks if not available.
       getElement match {
         case InputTuple(from, tuple) =>
           currentInputTuple = Left(tuple)
-          handleInputTuple()
+          handleInputTupleForScan()
         case SenderChangeMarker(link) =>
           currentInputLink = link
         case EndMarker =>
           currentInputTuple = Right(InputExhausted())
-          handleInputTuple()
+          handleInputTupleForScan()
           if (currentInputLink != null) {
             asyncRPCClient.send(LinkCompleted(currentInputLink), CONTROLLER)
           }
@@ -173,6 +168,41 @@ class DataProcessor( // dependencies:
           batchProducer.emitEndOfUpstream()
         case ControlElement(payload, from) =>
           processControlCommand(payload, from)
+      }
+    }
+  }
+
+  /** Provide main functionality of data processing
+    *
+    * @throws Exception (from engine code only)
+    */
+  @throws[Exception]
+  private[this] def runDPThreadMainLogic(): Unit = {
+    if (actorId.toString().contains("Scan")) {
+      runDPThreadMainLogicForScan()
+    } else {
+      // main DP loop
+      while (!isCompleted) {
+        // take the next data element from internal queue, blocks if not available.
+        getElement match {
+          case InputTuple(from, tuple) =>
+            currentInputTuple = Left(tuple)
+            handleInputTuple()
+          case SenderChangeMarker(link) =>
+            currentInputLink = link
+          case EndMarker =>
+            currentInputTuple = Right(InputExhausted())
+            handleInputTuple()
+            if (currentInputLink != null) {
+              asyncRPCClient.send(LinkCompleted(currentInputLink), CONTROLLER)
+            }
+          case EndOfAllMarker =>
+            // end of processing, break DP loop
+            isCompleted = true
+            batchProducer.emitEndOfUpstream()
+          case ControlElement(payload, from) =>
+            processControlCommand(payload, from)
+        }
       }
     }
     // Send Completed signal to worker actor.
@@ -201,6 +231,24 @@ class DataProcessor( // dependencies:
     asyncRPCServer.execute(PauseWorker(), SELF)
   }
 
+  private[this] def handleInputTupleForScan(): Unit = {
+    // process controls before processing the input tuple.
+    processControlCommandsDuringExecutionForScan()
+    if (currentInputTuple != null) {
+      // pass input tuple to operator logic.
+      currentOutputIterator = processInputTuple()
+      // process controls before outputting tuples.
+      processControlCommandsDuringExecutionForScan()
+      // output loop: take one tuple from iterator at a time.
+      while (outputAvailable(currentOutputIterator)) {
+        // send tuple to downstream.
+        outputOneTuple()
+        // process controls after one tuple has been outputted.
+        processControlCommandsDuringExecutionForScan()
+      }
+    }
+  }
+
   private[this] def handleInputTuple(): Unit = {
     // process controls before processing the input tuple.
     processControlCommandsDuringExecution()
@@ -220,14 +268,20 @@ class DataProcessor( // dependencies:
   }
 
   private[this] def outputAvailable(
-      outputIterator: Iterator[(ITuple, Option[LinkIdentity])]
-  ): Boolean = {
+                                     outputIterator: Iterator[(ITuple, Option[LinkIdentity])]
+                                   ): Boolean = {
     try {
       outputIterator != null && outputIterator.hasNext
     } catch safely {
       case e =>
         handleOperatorException(e)
         false
+    }
+  }
+
+  private[this] def processControlCommandsDuringExecutionForScan(): Unit = {
+    while (!isControlQueueEmpty || pauseManager.isPaused || backpressured) {
+      takeOneControlCommandAndProcess()
     }
   }
 
@@ -249,9 +303,9 @@ class DataProcessor( // dependencies:
   }
 
   private[this] def processControlCommand(
-      payload: ControlPayload,
-      from: ActorVirtualIdentity
-  ): Unit = {
+                                           payload: ControlPayload,
+                                           from: ActorVirtualIdentity
+                                         ): Unit = {
     payload match {
       case invocation: ControlInvocation =>
         asyncRPCServer.logControlInvocation(invocation, from)
